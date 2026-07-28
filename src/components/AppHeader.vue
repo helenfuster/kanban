@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
-import { Camera, Archive, LogOut, Menu, Plus, UserRound, Users, X } from '@lucide/vue'
+import { Camera, Archive, LogOut, Menu, UserRound, X } from '@lucide/vue'
 import { useBoardStore } from '../stores/board'
 import { useAuthStore } from '../stores/auth'
-import MembersManager from './MembersManager.vue'
-import MemberFilterSelect from './MemberFilterSelect.vue'
 import LabelFilterSelect from './LabelFilterSelect.vue'
 import NotificationCenter from './NotificationCenter.vue'
 import HeaderSearch from './HeaderSearch.vue'
@@ -12,7 +10,6 @@ import ArchivedCardsModal from './ArchivedCardsModal.vue'
 
 const board = useBoardStore()
 const auth = useAuthStore()
-const membersManager = ref<{ openModal: () => void } | null>(null)
 const archivedModal = ref<{ openModal: () => void } | null>(null)
 const menuOpen = ref(false)
 
@@ -30,11 +27,6 @@ async function onAvatarChange(event: Event) {
     }
   }
   input.value = ''
-}
-
-function openMembers() {
-  menuOpen.value = false
-  membersManager.value?.openModal()
 }
 
 function openArchived() {
@@ -89,20 +81,10 @@ onBeforeUnmount(() => {
       <h1 class="truncate text-base font-semibold tracking-tight text-text-primary">
         {{ board.title }}
       </h1>
-      <button
-        type="button"
-        class="flex size-8 shrink-0 items-center justify-center rounded-xl border border-dashed border-white/25 text-text-secondary transition-colors hover:border-accent hover:bg-accent/15 hover:text-accent"
-        title="Cadastrar ou remover usuários"
-        aria-label="Gerenciar usuários"
-        @click="membersManager?.openModal()"
-      >
-        <Plus :size="15" :stroke-width="2.5" />
-      </button>
     </div>
 
-    <!-- Desktop: filtro -->
+    <!-- Desktop: filtro de etiquetas -->
     <div class="hidden min-w-0 flex-1 items-center justify-center gap-2 px-2 md:flex">
-      <MemberFilterSelect compact />
       <LabelFilterSelect compact />
     </div>
 
@@ -128,7 +110,6 @@ onBeforeUnmount(() => {
       </button>
 
       <div class="flex items-center gap-1 md:hidden">
-        <MemberFilterSelect mini />
         <LabelFilterSelect mini />
       </div>
 
@@ -266,14 +247,6 @@ onBeforeUnmount(() => {
                 {{ board.archivedCards.length }}
               </span>
             </button>
-            <button
-              type="button"
-              class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-text-secondary hover:bg-white/10 hover:text-text-primary"
-              @click="openMembers"
-            >
-              <Users :size="17" />
-              Usuários do time
-            </button>
             <label
               class="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-text-secondary hover:bg-white/10 hover:text-text-primary"
             >
@@ -300,7 +273,6 @@ onBeforeUnmount(() => {
       </div>
     </Teleport>
 
-    <MembersManager ref="membersManager" />
     <ArchivedCardsModal ref="archivedModal" />
   </header>
 </template>
