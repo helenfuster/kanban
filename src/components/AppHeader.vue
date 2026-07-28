@@ -13,18 +13,38 @@ const archivedModal = ref<{ openModal: () => void } | null>(null)
 const menuOpen = ref(false)
 
 function exportBackup() {
-  const data = {
-    board: board.title,
-    exportedAt: new Date().toISOString(),
-    columns: board.columns,
-    cards: board.cards,
-    labels: board.labels,
+  const headers = ['Coluna', 'Título', 'Descrição', 'Etiquetas', 'Data Inicial', 'Data Limite', 'Status']
+
+  const escapeCsv = (val: unknown) => {
+    const clean = String(val ?? '').replace(/"/g, '""')
+    return `"${clean}"`
   }
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+
+  const rows = board.cards.map((card) => {
+    const col = board.columns.find((c) => c.id === card.columnId)?.title || 'Sem coluna'
+    const cardLabels = card.labelIds
+      .map((id) => board.labels.find((l) => l.id === id)?.name)
+      .filter(Boolean)
+      .join(', ')
+    const status = card.completed ? 'Concluído' : 'Pendente'
+
+    return [
+      escapeCsv(col),
+      escapeCsv(card.title),
+      escapeCsv(card.description),
+      escapeCsv(cardLabels),
+      escapeCsv(card.startDate ? card.startDate.slice(0, 10) : ''),
+      escapeCsv(card.dueDate ? card.dueDate.slice(0, 10) : ''),
+      escapeCsv(status),
+    ].join(';')
+  })
+
+  const csvContent = '\uFEFF' + [headers.map(escapeCsv).join(';'), ...rows].join('\n')
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `kanban-backup-${new Date().toISOString().slice(0, 10)}.json`
+  a.download = `kanban-export-${new Date().toISOString().slice(0, 10)}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -128,8 +148,8 @@ onBeforeUnmount(() => {
       <button
         type="button"
         class="relative inline-flex size-8 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-white/10 hover:text-text-primary"
-        title="Exportar backup do quadro (JSON)"
-        aria-label="Exportar backup do quadro"
+        title="Exportar tarefas em CSV (Excel)"
+        aria-label="Exportar tarefas em CSV"
         @click="exportBackup"
       >
         <Download :size="17" :stroke-width="2.25" />
