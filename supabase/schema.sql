@@ -1,9 +1,9 @@
--- ========================================================
--- SCHEMA INICIAL DO SUPABASE - WORKSPACE HELEN (KANBAN)
--- Cole este script no SQL Editor do seu Supabase e clique em RUN
--- ========================================================
+-- ====================================================================
+-- SCRIPT SQL DEFINITIVO E COMPLETO - WORKSPACE HELEN (KANBAN)
+-- Copie TODO este código, cole no SQL Editor do Supabase e clique em RUN
+-- ====================================================================
 
--- 1. EXTENSÕES
+-- 1. EXTENSÕES NECESSÁRIAS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 2. TABELA DE PERFIS (profiles)
@@ -131,9 +131,30 @@ CREATE TABLE IF NOT EXISTS public.daily_entries (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ========================================================
--- 14. FUNÇÃO RPC PARA CARREGAR O SNAPSHOT DO QUADRO
--- ========================================================
+-- ====================================================================
+-- 14. CRIAR BUCKETS DE STORAGE (AVATARS E CARD-ATTACHMENTS)
+-- ====================================================================
+INSERT INTO storage.buckets (id, name, public)
+VALUES 
+  ('avatars', 'avatars', true),
+  ('card-attachments', 'card-attachments', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- POLÍTICAS DE PERMISSÃO PARA OS BUCKETS DE STORAGE
+DROP POLICY IF EXISTS "Acesso total avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Acesso total card-attachments" ON storage.objects;
+
+CREATE POLICY "Acesso total avatars" ON storage.objects
+  FOR ALL USING (bucket_id = 'avatars')
+  WITH CHECK (bucket_id = 'avatars');
+
+CREATE POLICY "Acesso total card-attachments" ON storage.objects
+  FOR ALL USING (bucket_id = 'card-attachments')
+  WITH CHECK (bucket_id = 'card-attachments');
+
+-- ====================================================================
+-- 15. FUNÇÃO RPC PARA CARREGAR O SNAPSHOT DO QUADRO (get_board_snapshot)
+-- ====================================================================
 CREATE OR REPLACE FUNCTION public.get_board_snapshot(p_board_id TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -166,7 +187,7 @@ BEGIN
   SELECT COALESCE(jsonb_agg(to_jsonb(c)), '[]'::jsonb) INTO v_columns
   FROM (SELECT * FROM public.columns WHERE board_id = p_board_id ORDER BY position ASC) c;
 
-  -- Cards (via colunas do quadro)
+  -- Cards
   SELECT COALESCE(jsonb_agg(to_jsonb(cd)), '[]'::jsonb) INTO v_cards
   FROM public.cards cd
   WHERE cd.column_id IN (SELECT id FROM public.columns WHERE board_id = p_board_id);
@@ -205,9 +226,9 @@ BEGIN
 END;
 $$;
 
--- ========================================================
--- 15. TRIGGER PARA CRIAR PERFIL AO REGISTRAR USUÁRIO
--- ========================================================
+-- ====================================================================
+-- 16. TRIGGER PARA CRIAR PERFIL AUTOMÁTICO AO REGISTRAR USUÁRIO
+-- ====================================================================
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -225,10 +246,9 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- ========================================================
--- 16. DESABILITAR RLS / LIBERAR ACESSO AUTENTICADO
--- (Para uso interno simples e direto)
--- ========================================================
+-- ====================================================================
+-- 17. PERMISSÕES E RLS DAS TABELAS (DESABILITADO PARA USO DIRETO)
+-- ====================================================================
 ALTER TABLE public.profiles DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.boards DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.members DISABLE ROW LEVEL SECURITY;
@@ -242,9 +262,9 @@ ALTER TABLE public.attachments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_entries DISABLE ROW LEVEL SECURITY;
 
--- ========================================================
--- 17. PUBLICAR PUBLICATION PARA REALTIME
--- ========================================================
+-- ====================================================================
+-- 18. PUBLICAÇÃO PARA SINCRO EM TEMPO REAL (REALTIME)
+-- ====================================================================
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
@@ -252,11 +272,14 @@ BEGIN
   END IF;
 END $$;
 
-ALTER PUBLICATION supabase_realtime ADD TABLE public.cards, public.columns, public.members, public.comments, public.attachments, public.labels, public.card_labels, public.card_members, public.notes, public.daily_entries;
+ALTER PUBLICATION supabase_realtime ADD TABLE 
+  public.cards, public.columns, public.members, public.comments, 
+  public.attachments, public.labels, public.card_labels, 
+  public.card_members, public.notes, public.daily_entries;
 
--- ========================================================
--- 18. DADOS INICIAIS (SEEDING DO QUADRO E COLUNAS)
--- ========================================================
+-- ====================================================================
+-- 19. ESTRUTURA E DADOS INICIAIS DO QUADRO (WORKSPACE HELEN)
+-- ====================================================================
 INSERT INTO public.boards (id, title)
 VALUES ('board-1', 'WORKSPACE HELEN')
 ON CONFLICT (id) DO UPDATE SET title = 'WORKSPACE HELEN';
@@ -273,13 +296,4 @@ VALUES
   ('l1', 'board-1', 'Urgente', 'red'),
   ('l2', 'board-1', 'Importante', 'yellow'),
   ('l3', 'board-1', 'Normal', 'blue')
-ON CONFLICT (id) DO NOTHING;
-
--- ========================================================
--- 19. CRIAR BUCKETS DE STORAGE (AVATARS E CARD-ATTACHMENTS)
--- ========================================================
-INSERT INTO storage.buckets (id, name, public)
-VALUES 
-  ('avatars', 'avatars', true),
-  ('card-attachments', 'card-attachments', true)
 ON CONFLICT (id) DO NOTHING;
