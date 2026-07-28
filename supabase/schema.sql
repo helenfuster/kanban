@@ -1,5 +1,5 @@
 -- ====================================================================
--- SCRIPT SQL DEFINITIVO E COMPLETO - WORKSPACE HELEN (KANBAN)
+-- SCRIPT SQL DEFINITIVO E CORRIGIDO - WORKSPACE HELEN (KANBAN)
 -- Copie TODO este código, cole no SQL Editor do Supabase e clique em RUN
 -- ====================================================================
 
@@ -131,16 +131,14 @@ CREATE TABLE IF NOT EXISTS public.daily_entries (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ====================================================================
 -- 14. CRIAR BUCKETS DE STORAGE (AVATARS E CARD-ATTACHMENTS)
--- ====================================================================
 INSERT INTO storage.buckets (id, name, public)
 VALUES 
   ('avatars', 'avatars', true),
   ('card-attachments', 'card-attachments', true)
 ON CONFLICT (id) DO NOTHING;
 
--- POLÍTICAS DE PERMISSÃO PARA OS BUCKETS DE STORAGE
+-- POLÍTICAS DE PERMISSÃO PARA UPLOAD DE IMAGENS E ARQUIVOS
 DROP POLICY IF EXISTS "Acesso total avatars" ON storage.objects;
 DROP POLICY IF EXISTS "Acesso total card-attachments" ON storage.objects;
 
@@ -152,9 +150,7 @@ CREATE POLICY "Acesso total card-attachments" ON storage.objects
   FOR ALL USING (bucket_id = 'card-attachments')
   WITH CHECK (bucket_id = 'card-attachments');
 
--- ====================================================================
 -- 15. FUNÇÃO RPC PARA CARREGAR O SNAPSHOT DO QUADRO (get_board_snapshot)
--- ====================================================================
 CREATE OR REPLACE FUNCTION public.get_board_snapshot(p_board_id TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -172,45 +168,54 @@ DECLARE
   v_attachments JSONB;
 BEGIN
   -- Board
-  SELECT to_jsonb(b) INTO v_board
+  SELECT to_jsonb(b) INTO v_board 
   FROM (SELECT title FROM public.boards WHERE id = p_board_id) b;
 
   -- Members
-  SELECT COALESCE(jsonb_agg(to_jsonb(m)), '[]'::jsonb) INTO v_members
+  SELECT COALESCE(jsonb_agg(to_jsonb(m)), '[]'::jsonb) INTO v_members 
   FROM public.members m WHERE m.board_id = p_board_id;
 
   -- Labels
-  SELECT COALESCE(jsonb_agg(to_jsonb(l)), '[]'::jsonb) INTO v_labels
+  SELECT COALESCE(jsonb_agg(to_jsonb(l)), '[]'::jsonb) INTO v_labels 
   FROM public.labels l WHERE l.board_id = p_board_id;
 
   -- Columns
-  SELECT COALESCE(jsonb_agg(to_jsonb(c)), '[]'::jsonb) INTO v_columns
+  SELECT COALESCE(jsonb_agg(to_jsonb(c)), '[]'::jsonb) INTO v_columns 
   FROM (SELECT * FROM public.columns WHERE board_id = p_board_id ORDER BY position ASC) c;
 
   -- Cards
-  SELECT COALESCE(jsonb_agg(to_jsonb(cd)), '[]'::jsonb) INTO v_cards
-  FROM public.cards cd
-  WHERE cd.column_id IN (SELECT id FROM public.columns WHERE board_id = p_board_id);
+  SELECT COALESCE(jsonb_agg(to_jsonb(cd)), '[]'::jsonb) INTO v_cards 
+  FROM public.cards cd 
+  JOIN public.columns col ON cd.column_id = col.id 
+  WHERE col.board_id = p_board_id;
 
   -- Card Labels
-  SELECT COALESCE(jsonb_agg(to_jsonb(cl)), '[]'::jsonb) INTO v_card_labels
-  FROM public.card_labels cl
-  WHERE cl.card_id IN (SELECT id FROM public.cards WHERE column_id IN (SELECT id FROM public.columns WHERE board_id = p_board_id));
+  SELECT COALESCE(jsonb_agg(to_jsonb(cl)), '[]'::jsonb) INTO v_card_labels 
+  FROM public.card_labels cl 
+  JOIN public.cards cd ON cl.card_id = cd.id 
+  JOIN public.columns col ON cd.column_id = col.id 
+  WHERE col.board_id = p_board_id;
 
   -- Card Members
-  SELECT COALESCE(jsonb_agg(to_jsonb(cm)), '[]'::jsonb) INTO v_card_members
-  FROM public.card_members cm
-  WHERE cm.card_id IN (SELECT id FROM public.cards WHERE column_id IN (SELECT id FROM public.columns WHERE board_id = p_board_id));
+  SELECT COALESCE(jsonb_agg(to_jsonb(cm)), '[]'::jsonb) INTO v_card_members 
+  FROM public.card_members cm 
+  JOIN public.cards cd ON cm.card_id = cd.id 
+  JOIN public.columns col ON cd.column_id = col.id 
+  WHERE col.board_id = p_board_id;
 
   -- Comments
-  SELECT COALESCE(jsonb_agg(to_jsonb(cmt)), '[]'::jsonb) INTO v_comments
-  FROM public.comments cmt
-  WHERE cmt.card_id IN (SELECT id FROM public.cards WHERE column_id IN (SELECT id FROM public.columns WHERE board_id = p_board_id));
+  SELECT COALESCE(jsonb_agg(to_jsonb(cmt)), '[]'::jsonb) INTO v_comments 
+  FROM public.comments cmt 
+  JOIN public.cards cd ON cmt.card_id = cd.id 
+  JOIN public.columns col ON cd.column_id = col.id 
+  WHERE col.board_id = p_board_id;
 
   -- Attachments
-  SELECT COALESCE(jsonb_agg(to_jsonb(att)), '[]'::jsonb) INTO v_attachments
-  FROM public.attachments att
-  WHERE att.card_id IN (SELECT id FROM public.cards WHERE column_id IN (SELECT id FROM public.columns WHERE board_id = p_board_id));
+  SELECT COALESCE(jsonb_agg(to_jsonb(att)), '[]'::jsonb) INTO v_attachments 
+  FROM public.attachments att 
+  JOIN public.cards cd ON att.card_id = cd.id 
+  JOIN public.columns col ON cd.column_id = col.id 
+  WHERE col.board_id = p_board_id;
 
   RETURN jsonb_build_object(
     'board', v_board,
@@ -226,9 +231,7 @@ BEGIN
 END;
 $$;
 
--- ====================================================================
--- 16. TRIGGER PARA CRIAR PERFIL AUTOMÁTICO AO REGISTRAR USUÁRIO
--- ====================================================================
+-- 16. TRIGGER PARA CRIAR PERFIL AUTOMÁTICO
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -243,12 +246,10 @@ $$;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
+  After INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- ====================================================================
--- 17. PERMISSÕES E RLS DAS TABELAS (DESABILITADO PARA USO DIRETO)
--- ====================================================================
+-- 17. LIBERAR ACESSO DAS TABELAS
 ALTER TABLE public.profiles DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.boards DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.members DISABLE ROW LEVEL SECURITY;
@@ -262,9 +263,7 @@ ALTER TABLE public.attachments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_entries DISABLE ROW LEVEL SECURITY;
 
--- ====================================================================
--- 18. PUBLICAÇÃO PARA SINCRO EM TEMPO REAL (REALTIME)
--- ====================================================================
+-- 18. PUBLICAÇÃO REALTIME
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
@@ -277,9 +276,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE
   public.attachments, public.labels, public.card_labels, 
   public.card_members, public.notes, public.daily_entries;
 
--- ====================================================================
--- 19. ESTRUTURA E DADOS INICIAIS DO QUADRO (WORKSPACE HELEN)
--- ====================================================================
+-- 19. ESTRUTURA E DADOS INICIAIS DO QUADRO
 INSERT INTO public.boards (id, title)
 VALUES ('board-1', 'WORKSPACE HELEN')
 ON CONFLICT (id) DO UPDATE SET title = 'WORKSPACE HELEN';
