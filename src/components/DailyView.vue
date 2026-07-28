@@ -6,17 +6,17 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDashed,
-  ListTodo,
   Plus,
   Trash2,
-  UserRound,
 } from '@lucide/vue'
 import { useBoardStore } from '../stores/board'
+import { useAuthStore } from '../stores/auth'
 import { entryProgress, toDateKey, useDailyStore } from '../stores/dailyTodos'
 import type { DailyEntry, DailyStatus } from '../types/daily'
 import MemberAvatar from './MemberAvatar.vue'
 
 const board = useBoardStore()
+const auth = useAuthStore()
 const daily = useDailyStore()
 
 const newTodoText = ref('')
@@ -24,7 +24,6 @@ const campaignDraft = ref('')
 const inputRef = ref<HTMLInputElement | null>(null)
 const celebratePin = ref(false)
 const addMenuDateKey = ref<string | null>(null)
-const memberPickerOpen = ref(false)
 
 const weekDaysHeader = ['dom.', 'seg.', 'ter.', 'qua.', 'qui.', 'sex.', 'sáb.']
 
@@ -96,11 +95,6 @@ function pickMemberForDay(memberId: string, dateKey: string) {
   daily.openEntry(memberId, dateKey)
 }
 
-function setResponsible(memberId: string) {
-  memberPickerOpen.value = false
-  daily.openEntry(memberId, daily.selectedDateKey)
-}
-
 const focusedEntry = computed(() => {
   const memberId = focusMemberId.value
   if (!memberId) return null
@@ -155,10 +149,6 @@ function statusOf(entry: DailyEntry) {
   const progress = entryProgress(entry)
   if (progress.complete) return statusMeta.done
   return statusMeta[entry.status]
-}
-
-function saveCampaign() {
-  daily.setCampaign(campaignDraft.value.trim())
 }
 
 function submitTodo() {
@@ -452,10 +442,24 @@ function submitTodo() {
         >
       <div class="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-8 sm:py-7">
         <header class="mb-6">
-          <div class="mb-2 flex items-start justify-between gap-3">
-            <h2 class="text-3xl font-bold tracking-tight text-text-primary">
-              {{ selectedMember?.name ?? 'Usuário' }}
-            </h2>
+          <div class="mb-2 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <label
+                class="relative flex size-10 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10 text-xs font-semibold text-white"
+                title="Sua foto de perfil"
+              >
+                <img
+                  v-if="auth.avatarUrl"
+                  :src="auth.avatarUrl"
+                  alt=""
+                  class="size-full object-cover"
+                />
+                <span v-else>{{ (auth.user?.email?.[0] || 'H').toUpperCase() }}</span>
+              </label>
+              <h2 class="text-3xl font-bold tracking-tight text-text-primary">
+                {{ auth.user?.email?.split('@')[0] || 'Helen Fuster' }}
+              </h2>
+            </div>
             <div
               v-if="focusedProgress.complete"
               class="flex size-9 items-center justify-center rounded-full bg-success text-board shadow-md"
@@ -477,60 +481,6 @@ function submitTodo() {
               Data
             </dt>
             <dd class="text-text-primary">{{ dateLabel }}</dd>
-          </div>
-
-          <div class="grid grid-cols-[140px_1fr] items-center gap-3 sm:grid-cols-[160px_1fr]">
-            <dt class="flex items-center gap-2 text-text-muted">
-              <UserRound :size="15" />
-              Responsável
-            </dt>
-            <dd class="relative">
-              <button
-                type="button"
-                class="inline-flex items-center gap-1.5 rounded-md bg-surface px-2 py-1 text-text-primary hover:bg-white/10"
-                :aria-expanded="memberPickerOpen"
-                @click="memberPickerOpen = !memberPickerOpen"
-              >
-                <MemberAvatar
-                  v-if="selectedMember"
-                  :member="selectedMember"
-                  size="sm"
-                />
-                {{ selectedMember?.name ?? 'Escolher' }}
-              </button>
-              <div
-                v-if="memberPickerOpen"
-                class="absolute left-0 top-full z-20 mt-1 min-w-[12rem] overflow-hidden rounded-xl border border-white/10 bg-board-elevated py-1 shadow-xl"
-              >
-                <button
-                  v-for="member in board.members"
-                  :key="member.id"
-                  type="button"
-                  class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-secondary hover:bg-white/10 hover:text-text-primary"
-                  @click="setResponsible(member.id)"
-                >
-                  <MemberAvatar :member="member" size="sm" />
-                  {{ member.name }}
-                </button>
-              </div>
-            </dd>
-          </div>
-
-          <div class="grid grid-cols-[140px_1fr] items-center gap-3 sm:grid-cols-[160px_1fr]">
-            <dt class="flex items-center gap-2 text-text-muted">
-              <ListTodo :size="15" />
-              Campanha
-            </dt>
-            <dd>
-              <input
-                v-model="campaignDraft"
-                type="text"
-                placeholder="Vazio"
-                class="w-full max-w-sm rounded-md border border-transparent bg-transparent px-2 py-1 text-text-primary outline-none placeholder:text-text-muted hover:bg-surface focus:border-border-subtle focus:bg-surface"
-                @blur="saveCampaign"
-                @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
-              />
-            </dd>
           </div>
 
           <div class="grid grid-cols-[140px_1fr] items-center gap-3 sm:grid-cols-[160px_1fr]">
