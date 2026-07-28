@@ -129,7 +129,8 @@ CREATE TABLE IF NOT EXISTS public.daily_entries (
   status TEXT DEFAULT 'todo',
   campaign TEXT DEFAULT '',
   todos JSONB DEFAULT '[]'::jsonb,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT daily_entries_member_date_unique UNIQUE (member_id, date_key)
 );
 
 -- 14. CRIAR BUCKETS DE STORAGE (AVATARS E CARD-ATTACHMENTS)

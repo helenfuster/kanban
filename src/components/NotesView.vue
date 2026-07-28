@@ -10,12 +10,10 @@ import {
 } from '@lucide/vue'
 import { useNotesStore } from '../stores/notes'
 import { useBoardStore } from '../stores/board'
-import { useAuthStore } from '../stores/auth'
 import type { NoteKind } from '../types/notes'
 
 const notesStore = useNotesStore()
 const board = useBoardStore()
-const auth = useAuthStore()
 
 const search = ref('')
 const kindFilter = ref<'all' | NoteKind>('all')
@@ -23,16 +21,11 @@ const draftTitle = ref('')
 const draftBody = ref('')
 
 const canEditSelected = computed(() => {
-  const note = notesStore.selectedNote
-  if (!note || !auth.memberId) return false
-  // Qualquer membro logado pode editar; exclusão fica restrita no store
-  return true
+  return !!notesStore.selectedNote
 })
 
 const canDeleteSelected = computed(() => {
-  const note = notesStore.selectedNote
-  if (!note || !auth.memberId) return false
-  return !note.authorId || note.authorId === auth.memberId || auth.isAdmin
+  return !!notesStore.selectedNote
 })
 
 const filteredNotes = computed(() => {

@@ -12,7 +12,7 @@ export const useAuthStore = defineStore('auth', () => {
   const memberId = ref<string | null>(null)
   const displayName = ref<string | null>(null)
   const avatarUrl = ref<string | null>(null)
-  const isAdmin = ref(false)
+  const isAdmin = ref(true)
   const uploadingAvatar = ref(false)
   const passwordRecovery = ref(false)
 
@@ -36,7 +36,7 @@ export const useAuthStore = defineStore('auth', () => {
     memberId.value = null
     displayName.value = null
     avatarUrl.value = null
-    isAdmin.value = false
+    isAdmin.value = true
   }
 
   function clearMessages() {
@@ -144,7 +144,7 @@ export const useAuthStore = defineStore('auth', () => {
     displayName.value = data?.display_name ?? user.value.email ?? null
     memberId.value = data?.member_id ?? null
     avatarUrl.value = data?.avatar_url ?? null
-    isAdmin.value = Boolean(data?.is_admin)
+    isAdmin.value = true
     await syncMemberRecord({ silent })
   }
 

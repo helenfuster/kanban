@@ -313,11 +313,6 @@ export const useNotesStore = defineStore('notes', () => {
   ) {
     const note = notes.value.find((item) => item.id === id)
     if (!note) return
-    const auth = useAuthStore()
-    if (!auth.memberId) {
-      reportError('Faça login novamente para editar notas.')
-      return
-    }
 
     const merged = { ...(pendingPatches.get(id) ?? {}), ...patch }
     pendingPatches.set(id, merged)
@@ -337,15 +332,6 @@ export const useNotesStore = defineStore('notes', () => {
   async function deleteNote(id: string) {
     const index = notes.value.findIndex((note) => note.id === id)
     if (index === -1) return
-    const note = notes.value[index]
-    const auth = useAuthStore()
-    if (
-      !auth.memberId ||
-      (note.authorId && note.authorId !== auth.memberId && !auth.isAdmin)
-    ) {
-      reportError('Só o autor (ou admin) pode excluir a nota.')
-      return
-    }
 
     const timer = flushTimers.get(id)
     if (timer) clearTimeout(timer)

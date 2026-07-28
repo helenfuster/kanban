@@ -187,8 +187,8 @@ onBeforeUnmount(() => {
         <button
           v-else
           type="button"
-          class="w-full truncate rounded-md px-2 py-1 text-left text-sm font-semibold text-text-primary hover:bg-column-hover"
-          title="Clique para renomear"
+          class="w-full break-words whitespace-normal rounded-md px-2 py-1 text-left text-sm font-semibold leading-snug text-text-primary hover:bg-column-hover"
+          :title="column.title"
           @click="startRename"
         >
           {{ column.title }}

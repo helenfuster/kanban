@@ -7,11 +7,18 @@ import {
   ChevronRight,
   CircleDashed,
   Plus,
+  Repeat,
   Trash2,
+  X,
 } from '@lucide/vue'
 import { useBoardStore } from '../stores/board'
 import { useAuthStore } from '../stores/auth'
-import { entryProgress, toDateKey, useDailyStore } from '../stores/dailyTodos'
+import {
+  entryProgress,
+  toDateKey,
+  useDailyStore,
+  type RecurrenceMode,
+} from '../stores/dailyTodos'
 import type { DailyEntry, DailyStatus } from '../types/daily'
 import MemberAvatar from './MemberAvatar.vue'
 
@@ -23,7 +30,9 @@ const newTodoText = ref('')
 const campaignDraft = ref('')
 const inputRef = ref<HTMLInputElement | null>(null)
 const celebratePin = ref(false)
-const addMenuDateKey = ref<string | null>(null)
+
+const recurrenceModalOpen = ref(false)
+const pendingTodoText = ref('')
 
 const weekDaysHeader = ['dom.', 'seg.', 'ter.', 'qua.', 'qui.', 'sex.', 'sáb.']
 
@@ -68,30 +77,6 @@ watch(
 function openDay(dateKey: string) {
   const memberId = focusMemberId.value ?? board.members[0]?.id
   if (!memberId) return
-  daily.openEntry(memberId, dateKey)
-}
-
-function membersAvailableForDate(_dateKey: string) {
-  return board.members
-}
-
-function startAddForDay(dateKey: string) {
-  if (board.memberFilterId) {
-    daily.openEntry(board.memberFilterId, dateKey)
-    addMenuDateKey.value = null
-    return
-  }
-  if (board.members.length <= 1) {
-    const only = board.members[0]?.id
-    if (only) daily.openEntry(only, dateKey)
-    addMenuDateKey.value = null
-    return
-  }
-  addMenuDateKey.value = addMenuDateKey.value === dateKey ? null : dateKey
-}
-
-function pickMemberForDay(memberId: string, dateKey: string) {
-  addMenuDateKey.value = null
   daily.openEntry(memberId, dateKey)
 }
 
@@ -151,10 +136,32 @@ function statusOf(entry: DailyEntry) {
   return statusMeta[entry.status]
 }
 
+function openRecurrenceModalForText(text: string) {
+  const trimmed = text.trim()
+  if (!trimmed) return
+  pendingTodoText.value = trimmed
+  recurrenceModalOpen.value = true
+}
+
 function submitTodo() {
-  daily.addTodo(newTodoText.value)
-  newTodoText.value = ''
+  if (!newTodoText.value.trim()) return
+  openRecurrenceModalForText(newTodoText.value)
+}
+
+function confirmRecurrence(mode: RecurrenceMode) {
+  if (!pendingTodoText.value.trim()) return
+  daily.addTodoWithRecurrence(pendingTodoText.value, mode, daily.selectedDateKey)
+  if (pendingTodoText.value.trim() === newTodoText.value.trim()) {
+    newTodoText.value = ''
+  }
+  pendingTodoText.value = ''
+  recurrenceModalOpen.value = false
   nextTick(() => inputRef.value?.focus())
+}
+
+function closeRecurrenceModal() {
+  recurrenceModalOpen.value = false
+  pendingTodoText.value = ''
 }
 </script>
 
@@ -314,42 +321,18 @@ function submitTodo() {
               </span>
             </button>
 
-            <div class="relative">
-              <button
-                type="button"
-                class="flex w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border-subtle/60 px-2 py-3 text-center transition-colors hover:border-accent/40 hover:bg-white/5"
-                :title="
-                  day.entries.length
-                    ? 'Adicionar rotina de outro membro'
-                    : 'Adicionar tarefa'
-                "
-                @click.stop="startAddForDay(day.dateKey)"
-              >
-                <Plus :size="14" class="text-text-muted" />
-                <span class="text-[11px] font-medium text-text-muted">
-                  {{ day.entries.length ? 'Outro membro' : 'Adicionar tarefa' }}
-                </span>
-              </button>
-
-              <div
-                v-if="addMenuDateKey === day.dateKey"
-                class="absolute inset-x-0 bottom-full z-20 mb-1 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-board-elevated py-1 shadow-xl"
-              >
-                <p class="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
-                  Criar para
-                </p>
-                <button
-                  v-for="member in membersAvailableForDate(day.dateKey)"
-                  :key="member.id"
-                  type="button"
-                  class="flex w-full items-center gap-2 px-2.5 py-2 text-left text-xs text-text-secondary hover:bg-white/10 hover:text-text-primary"
-                  @click.stop="pickMemberForDay(member.id, day.dateKey)"
-                >
-                  <MemberAvatar :member="member" size="sm" />
-                  <span class="truncate">{{ member.name }}</span>
-                </button>
-              </div>
-            </div>
+            <button
+              v-if="!day.entries.length"
+              type="button"
+              class="flex w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border-subtle/60 px-2 py-3 text-center transition-colors hover:border-accent/40 hover:bg-white/5"
+              title="Adicionar tarefa para este dia"
+              @click.stop="openDay(day.dateKey)"
+            >
+              <Plus :size="14" class="text-text-muted" />
+              <span class="text-[11px] font-medium text-text-muted">
+                Adicionar tarefa
+              </span>
+            </button>
           </div>
         </div>
       </div>
@@ -545,6 +528,14 @@ function submitTodo() {
             />
             <button
               type="button"
+              class="rounded-md p-1 text-text-muted opacity-0 transition-opacity hover:bg-accent/15 hover:text-accent group-hover:opacity-100"
+              title="Repetir este afazer para outros dias"
+              @click="openRecurrenceModalForText(todo.text)"
+            >
+              <Repeat :size="14" />
+            </button>
+            <button
+              type="button"
               class="rounded-md p-1 text-text-muted opacity-0 transition-opacity hover:bg-danger/15 hover:text-danger group-hover:opacity-100"
               aria-label="Remover tarefa"
               @click="daily.removeTodo(todo.id)"
@@ -576,5 +567,86 @@ function submitTodo() {
       </Transition>
     </div>
     </div>
+
+    <!-- Modal de Recorrência -->
+    <Teleport to="body">
+      <div
+        v-if="recurrenceModalOpen"
+        class="fixed inset-0 z-[250] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+        @click.self="closeRecurrenceModal"
+      >
+        <div class="panel-glass w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-board-elevated p-6 shadow-2xl">
+          <div class="mb-4 flex items-center justify-between border-b border-white/10 pb-3">
+            <div class="flex items-center gap-2.5">
+              <div class="flex size-9 items-center justify-center rounded-xl bg-accent/20 text-accent">
+                <Repeat :size="18" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <h3 class="text-base font-bold text-text-primary">Recorrência do Afazer</h3>
+                <p class="truncate text-xs text-text-muted max-w-[240px]">"{{ pendingTodoText }}"</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              class="rounded-lg p-1.5 text-text-muted hover:bg-white/10 hover:text-text-primary"
+              @click="closeRecurrenceModal"
+            >
+              <X :size="18" />
+            </button>
+          </div>
+
+          <p class="mb-4 text-xs text-text-secondary">
+            Escolha com que frequência deseja criar este afazer nos próximos dias:
+          </p>
+
+          <div class="space-y-2.5">
+            <button
+              v-for="opt in [
+                {
+                  id: 'today' as const,
+                  title: 'Somente hoje',
+                  desc: 'Cria o afazer apenas para a data selecionada',
+                  icon: '📌',
+                },
+                {
+                  id: 'rest_of_week' as const,
+                  title: 'Restante desta semana',
+                  desc: 'Cria o afazer para todos os dias restantes (até Domingo)',
+                  icon: '📅',
+                },
+                {
+                  id: 'weekdays' as const,
+                  title: 'Dias úteis da semana (Segunda a Sexta)',
+                  desc: 'Cria o afazer para os dias de semana',
+                  icon: '💼',
+                },
+                {
+                  id: 'next_7_days' as const,
+                  title: 'Próximos 7 dias seguidos',
+                  desc: 'Cria o afazer para os próximos 7 dias corridos',
+                  icon: '🔄',
+                },
+                {
+                  id: 'next_30_days' as const,
+                  title: 'Próximos 30 dias (Mês inteiro)',
+                  desc: 'Cria o afazer para os próximos 30 dias corridos',
+                  icon: '🗓️',
+                },
+              ]"
+              :key="opt.id"
+              type="button"
+              class="flex w-full items-start gap-3 rounded-xl border border-white/10 bg-surface/80 p-3 text-left transition-all hover:border-accent hover:bg-white/10"
+              @click="confirmRecurrence(opt.id)"
+            >
+              <span class="text-xl leading-none">{{ opt.icon }}</span>
+              <div class="min-w-0 flex-1">
+                <p class="text-xs font-semibold text-text-primary">{{ opt.title }}</p>
+                <p class="mt-0.5 text-[11px] leading-tight text-text-muted">{{ opt.desc }}</p>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

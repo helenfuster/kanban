@@ -11,6 +11,81 @@ const STORAGE_KEY = 'kanban-daily-ui-v1'
 
 export type DailyViewMode = 'day' | 'week' | 'month'
 
+export type RecurrenceMode =
+  | 'today'
+  | 'rest_of_week'
+  | 'weekdays'
+  | 'next_7_days'
+  | 'next_30_days'
+
+export function getRecurrenceTargetDates(
+  startDateKey: string,
+  mode: RecurrenceMode,
+): string[] {
+  const start = parseDateKey(startDateKey)
+  const result: string[] = []
+
+  if (mode === 'today') {
+    return [startDateKey]
+  }
+
+  if (mode === 'rest_of_week') {
+    const sunday = startOfWeek(start)
+    sunday.setDate(sunday.getDate() + 6)
+    const curr = new Date(start)
+    while (curr <= sunday) {
+      result.push(toDateKey(curr))
+      curr.setDate(curr.getDate() + 1)
+    }
+    return result
+  }
+
+  if (mode === 'weekdays') {
+    const sunday = startOfWeek(start)
+    sunday.setDate(sunday.getDate() + 6)
+    const curr = new Date(start)
+    while (curr <= sunday) {
+      const day = curr.getDay()
+      if (day !== 0 && day !== 6) {
+        result.push(toDateKey(curr))
+      }
+      curr.setDate(curr.getDate() + 1)
+    }
+    if (result.length < 2) {
+      const curr2 = new Date(start)
+      for (let i = 0; i < 7; i++) {
+        const day = curr2.getDay()
+        const key = toDateKey(curr2)
+        if (day !== 0 && day !== 6 && !result.includes(key)) {
+          result.push(key)
+        }
+        curr2.setDate(curr2.getDate() + 1)
+      }
+    }
+    return result
+  }
+
+  if (mode === 'next_7_days') {
+    const curr = new Date(start)
+    for (let i = 0; i < 7; i++) {
+      result.push(toDateKey(curr))
+      curr.setDate(curr.getDate() + 1)
+    }
+    return result
+  }
+
+  if (mode === 'next_30_days') {
+    const curr = new Date(start)
+    for (let i = 0; i < 30; i++) {
+      result.push(toDateKey(curr))
+      curr.setDate(curr.getDate() + 1)
+    }
+    return result
+  }
+
+  return [startDateKey]
+}
+
 function createId(prefix: string) {
   return `${prefix}-${crypto.randomUUID().slice(0, 8)}`
 }
@@ -38,7 +113,7 @@ function asTodos(value: Json): DailyTodoItem[] {
 
 function emptyEntry(memberId: string, dateKey: string): DailyEntry {
   return {
-    id: createId('day'),
+    id: `day_${memberId}_${dateKey}`,
     memberId,
     dateKey,
     status: 'todo',
@@ -130,7 +205,7 @@ export const useDailyStore = defineStore('daily', () => {
         todos: entry.todos as unknown as Json,
         updated_at: entry.updatedAt,
       },
-      { onConflict: 'member_id,date_key' },
+      { onConflict: 'id' },
     )
     if (upsertError) {
       error.value = upsertError.message
@@ -343,19 +418,18 @@ export const useDailyStore = defineStore('daily', () => {
     options?: { persistEmpty?: boolean },
   ) {
     if (!memberId) return null
+    let targetMemberId = memberId
     if (
       board.members.length &&
-      !board.members.some((member) => member.id === memberId)
+      !board.members.some((member) => member.id === targetMemberId)
     ) {
-      error.value = 'Membro inválido para criar tarefa.'
-      useToastStore().error(error.value)
-      return null
+      targetMemberId = board.members[0]?.id ?? targetMemberId
     }
     let entry = entries.value.find(
-      (item) => item.memberId === memberId && item.dateKey === dateKey,
+      (item) => item.memberId === targetMemberId && item.dateKey === dateKey,
     )
     if (!entry) {
-      entry = emptyEntry(memberId, dateKey)
+      entry = emptyEntry(targetMemberId, dateKey)
       entries.value.push(entry)
       // Só grava no banco quando há conteúdo real (evita race com load)
       if (options?.persistEmpty) schedulePersist(entry)
@@ -414,19 +488,47 @@ export const useDailyStore = defineStore('daily', () => {
   }
 
   function addTodo(text: string) {
+    addTodoWithRecurrence(text, 'today')
+  }
+
+  function addTodoWithRecurrence(
+    text: string,
+    mode: RecurrenceMode = 'today',
+    startDateKey = selectedDateKey.value,
+  ) {
     const trimmed = text.trim()
     if (!trimmed) return
-    const entry = ensureEntry()
-    if (!entry) return
-    const todo: DailyTodoItem = {
-      id: createId('td'),
-      text: trimmed,
-      completed: false,
+
+    const dates = getRecurrenceTargetDates(startDateKey, mode)
+    const mId = activeMemberId.value
+    let count = 0
+
+    for (const dKey of dates) {
+      const entry = ensureEntry(mId, dKey)
+      if (!entry) continue
+
+      const lower = trimmed.toLowerCase()
+      const exists = entry.todos.some(
+        (item) => item.text.trim().toLowerCase() === lower,
+      )
+
+      if (!exists) {
+        const todo: DailyTodoItem = {
+          id: createId('td'),
+          text: trimmed,
+          completed: false,
+        }
+        entry.todos.push(todo)
+        entry.updatedAt = new Date().toISOString()
+        if (entry.status === 'done') entry.status = 'in_progress'
+        schedulePersist(entry)
+        count++
+      }
     }
-    entry.todos.push(todo)
-    entry.updatedAt = new Date().toISOString()
-    if (entry.status === 'done') entry.status = 'in_progress'
-    schedulePersist(entry)
+
+    if (dates.length > 1 && count > 0) {
+      useToastStore().success(`Tarefa criada para ${count} dia(s)!`)
+    }
   }
 
   function toggleTodo(todoId: string) {
@@ -492,6 +594,7 @@ export const useDailyStore = defineStore('daily', () => {
     setStatus,
     setCampaign,
     addTodo,
+    addTodoWithRecurrence,
     toggleTodo,
     updateTodoText,
     removeTodo,
