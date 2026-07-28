@@ -112,7 +112,7 @@ export const useNotesStore = defineStore('notes', () => {
         title: row.title,
         body: row.body,
         kind: row.kind as NoteKind,
-        authorId: row.author_id ?? '',
+        authorId: (row as { author_id?: string }).author_id ?? 'owner',
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       }))

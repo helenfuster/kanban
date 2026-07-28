@@ -250,7 +250,7 @@ export const useDailyStore = defineStore('daily', () => {
       board.memberFilterId ??
       detailMemberId.value ??
       board.members[0]?.id ??
-      null,
+      'owner',
   )
 
   const currentEntry = computed(() => {

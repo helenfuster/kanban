@@ -1377,6 +1377,18 @@ export const useBoardStore = defineStore('board', () => {
     card.updatedAt = new Date().toISOString()
     quietRealtime()
 
+    await supabase.from('cards').upsert(
+      {
+        id: card.id,
+        column_id: card.columnId,
+        title: card.title,
+        description: card.description || '',
+        position: card.position,
+        completed: card.completed,
+      },
+      { onConflict: 'id' },
+    )
+
     let { error: insertError } = await supabase.from('attachments').insert({
       id: attachment.id,
       card_id: cardId,
