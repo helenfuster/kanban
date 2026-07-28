@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS public.attachments (
   id TEXT PRIMARY KEY,
   card_id TEXT REFERENCES public.cards(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  storage_path TEXT,
   url TEXT NOT NULL,
   mime_type TEXT NOT NULL,
   size_bytes BIGINT DEFAULT 0,
