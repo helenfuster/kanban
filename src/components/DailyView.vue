@@ -284,7 +284,7 @@ function closeRecurrenceModal() {
               v-for="entry in day.entries"
               :key="entry.id"
               type="button"
-              class="relative w-full rounded-xl border border-border-subtle/70 bg-card p-2.5 pr-9 text-left shadow-sm transition-colors hover:bg-card-hover"
+              class="relative w-full rounded-xl border border-border-subtle/70 bg-card p-3 text-left shadow-sm transition-colors hover:bg-card-hover"
               @click="daily.openEntry(entry.memberId, day.dateKey)"
             >
               <div
@@ -292,33 +292,89 @@ function closeRecurrenceModal() {
                 class="absolute right-2 top-2"
               >
                 <div
-                  class="flex size-6 items-center justify-center rounded-full bg-success text-board shadow-md"
+                  class="flex size-5 items-center justify-center rounded-full bg-success text-board shadow-md"
                 >
-                  <Check :size="12" :stroke-width="3" />
+                  <Check :size="11" :stroke-width="3" />
                 </div>
               </div>
 
-              <div class="mb-1.5 flex items-center gap-1.5">
-                <MemberAvatar
-                  v-if="memberOf(entry)"
-                  :member="memberOf(entry)!"
-                  size="sm"
-                />
-                <span class="truncate text-xs font-semibold text-text-primary">
-                  {{ memberOf(entry)?.name }}
+              <!-- Header do card no dia -->
+              <div class="mb-2 flex items-center justify-between gap-1">
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <MemberAvatar
+                    v-if="memberOf(entry)"
+                    :member="memberOf(entry)!"
+                    size="sm"
+                  />
+                  <span class="truncate text-xs font-semibold text-text-primary">
+                    {{ memberOf(entry)?.name }}
+                  </span>
+                </div>
+                <span
+                  v-if="entryProgress(entry).total > 0"
+                  class="shrink-0 rounded-full bg-accent/20 px-1.5 py-0.5 text-[10px] font-bold text-accent"
+                >
+                  {{ entryProgress(entry).done }}/{{ entryProgress(entry).total }}
                 </span>
               </div>
-              <p class="mb-2 line-clamp-2 text-[11px] leading-snug text-text-muted">
-                {{ entry.campaign || entry.todos[0]?.text }}
-              </p>
-              <span
-                :class="[
-                  'inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
-                  statusOf(entry).className,
-                ]"
+
+              <!-- Lista de Tarefas do dia no card semanal -->
+              <ul v-if="entry.todos.length" class="mb-2.5 space-y-1">
+                <li
+                  v-for="todo in entry.todos.slice(0, 4)"
+                  :key="todo.id"
+                  class="flex items-center gap-1.5 text-[11px] leading-tight"
+                >
+                  <span
+                    :class="[
+                      'inline-flex size-3.5 shrink-0 items-center justify-center rounded border text-[9px] font-bold transition-colors',
+                      todo.completed
+                        ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-300'
+                        : 'border-white/20 bg-surface/60 text-transparent',
+                    ]"
+                  >
+                    ✓
+                  </span>
+                  <span
+                    :class="[
+                      'min-w-0 flex-1 truncate',
+                      todo.completed ? 'text-text-muted line-through' : 'font-medium text-text-primary',
+                    ]"
+                  >
+                    {{ todo.text }}
+                  </span>
+                </li>
+                <li
+                  v-if="entry.todos.length > 4"
+                  class="pl-5 text-[10px] italic text-text-muted"
+                >
+                  +{{ entry.todos.length - 4 }} outra(s)...
+                </li>
+              </ul>
+              <p
+                v-else-if="entry.campaign"
+                class="mb-2 line-clamp-2 text-[11px] leading-snug text-text-muted"
               >
-                {{ statusOf(entry).label }}
-              </span>
+                {{ entry.campaign }}
+              </p>
+
+              <!-- Footer do Card: Status + Contagem de Concluídas/Pendentes -->
+              <div class="flex flex-wrap items-center justify-between gap-1 border-t border-white/5 pt-1.5">
+                <span
+                  :class="[
+                    'inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
+                    statusOf(entry).className,
+                  ]"
+                >
+                  {{ statusOf(entry).label }}
+                </span>
+                <span
+                  v-if="entryProgress(entry).total > 0"
+                  class="text-[10px] font-medium text-text-muted"
+                >
+                  {{ entryProgress(entry).done }} de {{ entryProgress(entry).total }} concluídas
+                </span>
+              </div>
             </button>
 
             <button
@@ -490,6 +546,42 @@ function closeRecurrenceModal() {
             </dd>
           </div>
         </dl>
+
+        <!-- Resumo Visual dos Afazeres Diários -->
+        <div
+          v-if="focusedEntry?.todos.length"
+          class="mb-6 rounded-2xl border border-white/10 bg-board-elevated/70 p-4 shadow-sm"
+        >
+          <div class="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-text-muted">
+                Resumo dos Afazeres
+              </span>
+              <span
+                class="rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-bold text-accent"
+              >
+                {{ focusedProgress.done }} de {{ focusedProgress.total }} concluídas
+              </span>
+            </div>
+            <span
+              v-if="focusedProgress.total - focusedProgress.done > 0"
+              class="text-xs font-semibold text-amber-300/90"
+            >
+              {{ focusedProgress.total - focusedProgress.done }} pendente(s)
+            </span>
+            <span v-else class="text-xs font-semibold text-emerald-400">
+              Tudo concluído! 🎉
+            </span>
+          </div>
+
+          <!-- Barra de Progresso Animada -->
+          <div class="h-2.5 w-full overflow-hidden rounded-full bg-surface">
+            <div
+              class="h-full bg-accent transition-all duration-500 ease-out"
+              :style="{ width: `${focusedProgress.percent}%` }"
+            />
+          </div>
+        </div>
 
         <h3 class="mb-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
           Afazeres do dia
