@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import {
+  BarChart3,
   CalendarDays,
   Columns3,
   ListChecks,
   NotebookPen,
 } from '@lucide/vue'
 
-export type NavTab = 'agenda' | 'board' | 'daily' | 'notes'
+export type NavTab = 'agenda' | 'board' | 'daily' | 'notes' | 'charts'
 
 defineProps<{
   activeTab: NavTab
@@ -21,6 +22,7 @@ const tabs: { id: NavTab; label: string; icon: typeof CalendarDays }[] = [
   { id: 'board', label: 'Quadro', icon: Columns3 },
   { id: 'daily', label: 'Tarefas', icon: ListChecks },
   { id: 'notes', label: 'Notas', icon: NotebookPen },
+  { id: 'charts', label: 'Gráficos', icon: BarChart3 },
 ]
 </script>
 

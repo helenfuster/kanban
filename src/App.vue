@@ -35,11 +35,16 @@ const NotesView = defineAsyncComponent({
   loader: () => import('./components/NotesView.vue'),
   ...asyncOpts,
 })
+const ChartsView = defineAsyncComponent({
+  loader: () => import('./components/ChartsView.vue'),
+  ...asyncOpts,
+})
 const tabViews: Record<NavTab, Component> = {
   board: markRaw(BoardView),
   agenda: markRaw(AgendaView),
   daily: markRaw(DailyView),
   notes: markRaw(NotesView),
+  charts: markRaw(ChartsView),
 }
 
 const auth = useAuthStore()
@@ -86,6 +91,7 @@ function prefetchTabChunks() {
   void import('./components/AgendaView.vue')
   void import('./components/DailyView.vue')
   void import('./components/NotesView.vue')
+  void import('./components/ChartsView.vue')
 }
 
 watch(
@@ -117,7 +123,7 @@ watch(activeTab, async (tab) => {
     await notes.init()
     notesReady.value = true
   }
-  if (tab === 'daily' && !dailyReady.value) {
+  if ((tab === 'daily' || tab === 'charts') && !dailyReady.value) {
     await daily.init()
     daily.sanitizeDetailMember()
     dailyReady.value = true
