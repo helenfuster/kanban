@@ -1377,7 +1377,7 @@ export const useBoardStore = defineStore('board', () => {
     card.updatedAt = new Date().toISOString()
     quietRealtime()
 
-    const { error: insertError } = await supabase.from('attachments').insert({
+    let { error: insertError } = await supabase.from('attachments').insert({
       id: attachment.id,
       card_id: cardId,
       name: attachment.name,
@@ -1388,6 +1388,20 @@ export const useBoardStore = defineStore('board', () => {
       created_at: attachment.createdAt,
       kind: 'file',
     })
+
+    if (insertError && insertError.message.includes('storage_path')) {
+      const { error: retryError } = await supabase.from('attachments').insert({
+        id: attachment.id,
+        card_id: cardId,
+        name: attachment.name,
+        url: attachment.url,
+        mime_type: attachment.mimeType,
+        size_bytes: attachment.sizeBytes,
+        created_at: attachment.createdAt,
+        kind: 'file',
+      })
+      insertError = retryError
+    }
 
     if (insertError) {
       error.value = insertError.message

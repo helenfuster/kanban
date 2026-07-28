@@ -161,9 +161,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /** Garante um member real vinculado ao usuário autenticado. */
-  async function syncMemberRecord(options?: { silent?: boolean }) {
+  async function syncMemberRecord(_options?: { silent?: boolean }) {
     if (!user.value) return
-    const silent = options?.silent ?? false
     const name = (displayName.value || user.value.email || 'Usuário').trim()
     const nextMemberId = `user-${user.value.id}`
     const alreadyLinked = memberId.value === nextMemberId
@@ -187,22 +186,12 @@ export const useAuthStore = defineStore('auth', () => {
     )
 
     if (upsertError) {
-      if (!silent) {
-        error.value = formatError(upsertError, 'Falha ao sincronizar usuário.')
-      }
-      return
-    }
-
-    const { error: linkError } = await supabase
-      .from('profiles')
-      .update({ member_id: nextMemberId })
-      .eq('id', user.value.id)
-
-    if (linkError) {
-      if (!silent) {
-        error.value = formatError(linkError, 'Falha ao vincular perfil.')
-      }
-      return
+      console.warn('[auth] erro ao sincronizar membro:', upsertError.message)
+    } else {
+      await supabase
+        .from('profiles')
+        .update({ member_id: nextMemberId })
+        .eq('id', user.value.id)
     }
 
     memberId.value = nextMemberId

@@ -190,16 +190,13 @@ export const useNotesStore = defineStore('notes', () => {
 
   async function createNote(kind: NoteKind = 'note') {
     const auth = useAuthStore()
-    if (!auth.memberId) {
-      reportError('Faça login novamente para criar notas.')
-      return null
-    }
+    const authorId = auth.memberId || auth.user?.id || 'owner'
     const note: Note = {
       id: createId(),
       title: kind === 'meeting' ? 'Nova ata de reunião' : 'Nova anotação',
       body: '',
       kind,
-      authorId: auth.memberId,
+      authorId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
@@ -215,7 +212,6 @@ export const useNotesStore = defineStore('notes', () => {
           title: note.title,
           body: note.body,
           kind: note.kind,
-          author_id: note.authorId,
           created_at: note.createdAt,
           updated_at: note.updatedAt,
         })

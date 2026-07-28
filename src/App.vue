@@ -3,6 +3,7 @@ import {
   defineAsyncComponent,
   markRaw,
   onMounted,
+  onUnmounted,
   type Component,
   ref,
   watch,
@@ -58,8 +59,32 @@ const dailyReady = ref(false)
 const chunksPrefetched = ref(false)
 
 onMounted(async () => {
+  window.addEventListener('keydown', handleKeydown)
   await auth.init()
 })
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
+
+function handleKeydown(e: KeyboardEvent) {
+  const target = e.target as HTMLElement | null
+  const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+  
+  if (e.key === 'Escape') {
+    if (board.selectedCardId) {
+      board.closeCard()
+    }
+  } else if (!isInput && (e.key === 'n' || e.key === 'N')) {
+    if (activeTab.value === 'board' && board.columns.length > 0) {
+      e.preventDefault()
+      const firstCol = board.columns[0]
+      if (firstCol) {
+        void board.addCard(firstCol.id, 'Nova Tarefa')
+      }
+    }
+  }
+}
 
 function prefetchTabChunks() {
   if (chunksPrefetched.value) return
