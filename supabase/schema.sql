@@ -1,5 +1,5 @@
 -- ====================================================================
--- SCRIPT SQL DEFINITIVO E CORRIGIDO - WORKSPACE HELEN (KANBAN)
+-- SCRIPT SQL DEFINITIVO E SEGURO - WORKSPACE HELEN (KANBAN)
 -- Copie TODO este código, cole no SQL Editor do Supabase e clique em RUN
 -- ====================================================================
 
@@ -246,7 +246,7 @@ $$;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
-  After INSERT ON auth.users
+  AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- 17. LIBERAR ACESSO DAS TABELAS
@@ -263,18 +263,22 @@ ALTER TABLE public.attachments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_entries DISABLE ROW LEVEL SECURITY;
 
--- 18. PUBLICAÇÃO REALTIME
+-- 18. PUBLICAÇÃO REALTIME (TRATAMENTO DE DUPLICADOS)
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
     CREATE PUBLICATION supabase_realtime;
   END IF;
-END $$;
 
-ALTER PUBLICATION supabase_realtime ADD TABLE 
-  public.cards, public.columns, public.members, public.comments, 
-  public.attachments, public.labels, public.card_labels, 
-  public.card_members, public.notes, public.daily_entries;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE 
+      public.cards, public.columns, public.members, public.comments, 
+      public.attachments, public.labels, public.card_labels, 
+      public.card_members, public.notes, public.daily_entries;
+  EXCEPTION
+    WHEN OTHERS THEN NULL;
+  END;
+END $$;
 
 -- 19. ESTRUTURA E DADOS INICIAIS DO QUADRO
 INSERT INTO public.boards (id, title)
