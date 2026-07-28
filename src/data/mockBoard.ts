@@ -11,13 +11,7 @@ const iso = (daysFromNow: number, hour = 12) => {
 export const mockBoard: Board = {
   id: 'board-1',
   title: 'B2C TEAM',
-  members: [
-    { id: 'm1', name: 'Thiago Malafaia', initials: 'TM', avatarColor: 'bg-sky-600' },
-    { id: 'm2', name: 'Ana Luiza', initials: 'AL', avatarColor: 'bg-pink-600' },
-    { id: 'm3', name: 'Milq Ribas', initials: 'MR', avatarColor: 'bg-emerald-600' },
-    { id: 'm4', name: 'Ana Clara', initials: 'AC', avatarColor: 'bg-amber-600' },
-    { id: 'm5', name: 'Danilo Tonon', initials: 'DT', avatarColor: 'bg-violet-600' },
-  ],
+  members: [],
   labels: [
     { id: 'l1', name: 'Urgente', color: 'red' },
     { id: 'l2', name: 'Design', color: 'purple' },
