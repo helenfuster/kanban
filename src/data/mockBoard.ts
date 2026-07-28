@@ -2,7 +2,7 @@ import type { Board } from '../types/board'
 
 export const mockBoard: Board = {
   id: 'board-1',
-  title: 'Meu Kanban',
+  title: 'WORKSPACE HELEN',
   members: [],
   labels: [
     { id: 'l1', name: 'Urgente', color: 'red' },

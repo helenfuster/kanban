@@ -53,7 +53,7 @@ function createNotificationId() {
 }
 
 export const useBoardStore = defineStore('board', () => {
-  const title = ref('Meu Kanban')
+  const title = ref('WORKSPACE HELEN')
   const columns = ref<Column[]>([])
   const cards = ref<Card[]>([])
   const labels = ref<Label[]>([])
@@ -493,7 +493,7 @@ export const useBoardStore = defineStore('board', () => {
 
   function reset() {
     unsubscribeRealtime()
-    title.value = 'Meu Kanban'
+    title.value = 'WORKSPACE HELEN'
     columns.value = []
     cards.value = []
     labels.value = []
