@@ -30,7 +30,6 @@ import draggable from 'vuedraggable'
 import { useBoardStore } from '../stores/board'
 import { useAuthStore } from '../stores/auth'
 import MemberAvatar from './MemberAvatar.vue'
-import AssigneePicker from './AssigneePicker.vue'
 import LabelPicker from './LabelPicker.vue'
 import { useEphemeralDismiss } from '../composables/useEphemeralDismiss'
 
@@ -666,13 +665,6 @@ function renderCommentBody(body: string) {
 
             <div class="flex-1 space-y-6 overflow-y-auto px-5 pb-6 sm:px-6">
           <section class="flex flex-wrap items-start gap-x-8 gap-y-5">
-            <AssigneePicker
-              label="Membros"
-              variant="stack"
-              :selected-ids="card.memberIds"
-              :members="board.members"
-              @toggle="board.toggleCardMember(card.id, $event)"
-            />
 
             <LabelPicker
               :selected-ids="card.labelIds"

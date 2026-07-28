@@ -20,9 +20,6 @@ import { useAuthStore } from './stores/auth'
 import { useBoardStore } from './stores/board'
 import { useNotesStore } from './stores/notes'
 import { useDailyStore } from './stores/dailyTodos'
-import { useNotificationsStore } from './stores/notifications'
-import { useCommunityStore } from './stores/community'
-import { useHubSectionsStore } from './stores/hubSections'
 
 const asyncOpts = { delay: 320 }
 
@@ -49,9 +46,6 @@ const auth = useAuthStore()
 const board = useBoardStore()
 const notes = useNotesStore()
 const daily = useDailyStore()
-const notifications = useNotificationsStore()
-const community = useCommunityStore()
-const hubSections = useHubSectionsStore()
 const activeTab = ref<NavTab>('board')
 const bootstrapping = ref(false)
 const notesReady = ref(false)
@@ -92,7 +86,6 @@ function prefetchTabChunks() {
   void import('./components/AgendaView.vue')
   void import('./components/DailyView.vue')
   void import('./components/NotesView.vue')
-  void import('./components/HubView.vue')
 }
 
 watch(
@@ -102,9 +95,6 @@ watch(
       board.reset()
       notes.reset()
       daily.reset()
-      notifications.reset()
-      community.reset()
-      hubSections.reset()
       notesReady.value = false
       dailyReady.value = false
       return
@@ -112,7 +102,6 @@ watch(
     bootstrapping.value = true
     try {
       await board.init()
-      await notifications.init()
       prefetchTabChunks()
     } finally {
       bootstrapping.value = false
