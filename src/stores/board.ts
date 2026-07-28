@@ -812,7 +812,6 @@ export const useBoardStore = defineStore('board', () => {
     quietRealtime()
     const { error: insertError } = await supabase.from('cards').insert({
       id: card.id,
-      board_id: BOARD_ID,
       column_id: card.columnId,
       title: card.title,
       description: card.description,
