@@ -1,0 +1,319 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Identidade B2C — base escura com azul SX */
+  --color-board: #070d13;
+  --color-board-elevated: #111a25;
+  --color-column: #16212e;
+  --color-column-hover: #1e2b3a;
+  --color-card: #212e3e;
+  --color-card-hover: #29384a;
+  --color-surface: #1a2533;
+  --color-border-subtle: #33455a;
+  --color-text-primary: #f1f6fb;
+  --color-text-secondary: #a8b9cb;
+  --color-text-muted: #7d90a4;
+  --color-accent: #39bcff;
+  --color-accent-hover: #6bd0ff;
+  --color-danger: #fb8585;
+  --color-success: #5ce68f;
+  --font-sans: 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background-color: var(--color-board);
+    color: var(--color-text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  /* Área de conteúdo padronizada (Agenda / Tarefas) */
+  .page-shell {
+    width: min(100% - 1.5rem, 85%);
+    max-width: 85%;
+    margin-inline: auto;
+  }
+
+  @media (min-width: 640px) {
+    .page-shell {
+      width: 85%;
+    }
+  }
+
+  /* Quadro: colunas centralizadas + scroll horizontal quando passam da tela */
+  .board-scroll {
+    scroll-padding-inline: 1.5rem;
+    scrollbar-gutter: stable;
+  }
+
+  .board-scroll::-webkit-scrollbar {
+    height: 12px;
+  }
+
+  .board-scroll::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 999px;
+    margin-inline: 1.5rem;
+  }
+
+  .board-scroll::-webkit-scrollbar-thumb {
+    background: #5a7189;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .board-scroll::-webkit-scrollbar-thumb:hover {
+    background: #7d90a4;
+    background-clip: padding-box;
+  }
+
+  .board-track {
+    box-sizing: border-box;
+  }
+}
+
+@layer components {
+  /* Fundo unificado: gradiente azul sutil (sem foto) */
+  .app-bg {
+    background-color: var(--color-board);
+    background-image:
+      radial-gradient(
+        ellipse 110% 70% at 8% -10%,
+        rgba(57, 188, 255, 0.13),
+        transparent 50%
+      ),
+      radial-gradient(
+        ellipse 80% 55% at 100% 5%,
+        rgba(57, 188, 255, 0.07),
+        transparent 46%
+      ),
+      radial-gradient(
+        ellipse 90% 45% at 50% 112%,
+        rgba(18, 56, 92, 0.24),
+        transparent 55%
+      ),
+      linear-gradient(
+        165deg,
+        #070d13 0%,
+        #0a1420 40%,
+        #0b1825 74%,
+        #060b11 100%
+      );
+    background-attachment: fixed;
+  }
+
+  .card-ghost {
+    opacity: 0.45;
+  }
+
+  .card-drag {
+    opacity: 1 !important;
+    transform: rotate(2deg);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  }
+
+  .column-ghost {
+    opacity: 0.4;
+  }
+
+  /* Painéis / colunas: glass alinhado ao accent */
+  .panel-glass,
+  .column-glass {
+    background: color-mix(in srgb, var(--color-column) 88%, transparent);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow:
+      0 10px 34px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  }
+
+  .panel-glass-accent {
+    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .panel-glass,
+    .column-glass {
+      background: color-mix(in srgb, var(--color-column) 98%, transparent);
+    }
+  }
+
+  .markdown-body a {
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    pointer-events: auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  .markdown-body a:hover {
+    color: var(--color-accent-hover);
+  }
+
+  .markdown-body {
+    line-height: 1.55;
+  }
+
+  .markdown-body p {
+    margin: 0 0 0.75em;
+  }
+
+  .markdown-body p:last-child {
+    margin-bottom: 0;
+  }
+
+  .markdown-body ul,
+  .markdown-body ol {
+    margin: 0 0 0.75em;
+    padding-left: 1.25rem;
+  }
+
+  .markdown-body code {
+    border-radius: 4px;
+    background: var(--color-surface);
+    padding: 0.1em 0.35em;
+    font-size: 0.9em;
+  }
+
+  .markdown-body pre {
+    overflow-x: auto;
+    border-radius: 8px;
+    background: var(--color-surface);
+    padding: 0.75rem 1rem;
+    margin: 0 0 0.75em;
+  }
+
+  .markdown-body pre code {
+    padding: 0;
+    background: transparent;
+  }
+
+  .markdown-body h1,
+  .markdown-body h2,
+  .markdown-body h3 {
+    color: var(--color-text-primary);
+    margin: 0 0 0.5em;
+    font-weight: 600;
+  }
+
+  @keyframes daily-pin-pop {
+    0% {
+      transform: scale(0.2) rotate(-30deg);
+      opacity: 0;
+    }
+    55% {
+      transform: scale(1.25) rotate(18deg);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1) rotate(12deg);
+      opacity: 1;
+    }
+  }
+
+  .daily-pin-pop {
+    animation: daily-pin-pop 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+  }
+
+  /* Troca de abas: fade + leve deslocamento (sem corte seco) */
+  .tab-stage {
+    isolation: isolate;
+  }
+
+  .tab-panel {
+    min-height: 0;
+  }
+
+  .tab-fade-enter-active {
+    transition:
+      opacity 0.28s ease,
+      transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .tab-fade-leave-active {
+    transition:
+      opacity 0.18s ease,
+      transform 0.18s ease;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .tab-fade-enter-active {
+    position: relative;
+    z-index: 1;
+  }
+
+  .tab-fade-enter-from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  .tab-fade-leave-to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  .view-fade-enter-active,
+  .view-fade-leave-active {
+    transition:
+      opacity 0.22s ease,
+      transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .view-fade-enter-from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  .view-fade-leave-to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  .view-fade-leave-active {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    pointer-events: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tab-fade-enter-active,
+    .tab-fade-leave-active,
+    .view-fade-enter-active,
+    .view-fade-leave-active {
+      transition-duration: 0.01ms !important;
+    }
+
+    .tab-fade-enter-from,
+    .tab-fade-leave-to,
+    .view-fade-enter-from,
+    .view-fade-leave-to {
+      transform: none;
+    }
+  }
+}
