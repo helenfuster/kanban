@@ -39,11 +39,16 @@ const ChartsView = defineAsyncComponent({
   loader: () => import('./components/ChartsView.vue'),
   ...asyncOpts,
 })
+const CampaignsView = defineAsyncComponent({
+  loader: () => import('./components/CampaignsView.vue'),
+  ...asyncOpts,
+})
 const tabViews: Record<NavTab, Component> = {
   board: markRaw(BoardView),
   agenda: markRaw(AgendaView),
   daily: markRaw(DailyView),
   notes: markRaw(NotesView),
+  campaigns: markRaw(CampaignsView),
   charts: markRaw(ChartsView),
 }
 
