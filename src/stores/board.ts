@@ -1377,41 +1377,51 @@ export const useBoardStore = defineStore('board', () => {
     card.updatedAt = new Date().toISOString()
     quietRealtime()
 
-    await supabase.from('cards').upsert(
+    try {
+      await supabase.from('cards').upsert(
+        {
+          id: card.id,
+          column_id: card.columnId,
+          title: card.title,
+          description: card.description || '',
+          position: card.position,
+          completed: card.completed,
+        },
+        { onConflict: 'id' },
+      )
+    } catch {
+      // Ignora erro de card pré-existente
+    }
+
+    let { error: insertError } = await supabase.from('attachments').upsert(
       {
-        id: card.id,
-        column_id: card.columnId,
-        title: card.title,
-        description: card.description || '',
-        position: card.position,
-        completed: card.completed,
-      },
-      { onConflict: 'id' },
-    )
-
-    let { error: insertError } = await supabase.from('attachments').insert({
-      id: attachment.id,
-      card_id: cardId,
-      name: attachment.name,
-      storage_path: storagePath,
-      url: attachment.url,
-      mime_type: attachment.mimeType,
-      size_bytes: attachment.sizeBytes,
-      created_at: attachment.createdAt,
-      kind: 'file',
-    })
-
-    if (insertError && insertError.message.includes('storage_path')) {
-      const { error: retryError } = await supabase.from('attachments').insert({
         id: attachment.id,
         card_id: cardId,
         name: attachment.name,
+        storage_path: storagePath,
         url: attachment.url,
         mime_type: attachment.mimeType,
         size_bytes: attachment.sizeBytes,
         created_at: attachment.createdAt,
         kind: 'file',
-      })
+      },
+      { onConflict: 'id' },
+    )
+
+    if (insertError && insertError.message.includes('storage_path')) {
+      const { error: retryError } = await supabase.from('attachments').upsert(
+        {
+          id: attachment.id,
+          card_id: cardId,
+          name: attachment.name,
+          url: attachment.url,
+          mime_type: attachment.mimeType,
+          size_bytes: attachment.sizeBytes,
+          created_at: attachment.createdAt,
+          kind: 'file',
+        },
+        { onConflict: 'id' },
+      )
       insertError = retryError
     }
 
