@@ -74,11 +74,23 @@ export interface AppNotification {
   meta?: Record<string, unknown>
 }
 
+export interface Aporte {
+  id: string
+  amount: number
+  date: string
+  startDate: string
+  endDate: string
+  notes?: string
+}
+
 export interface Card {
   id: string
   columnId: string
   title: string
   description: string
+  organizer?: string
+  eventName?: string
+  aportes?: Aporte[]
   labelIds: string[]
   memberIds: string[]
   startDate: string | null

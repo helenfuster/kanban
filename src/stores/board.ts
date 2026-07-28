@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type {
+  Aporte,
   Attachment,
   Card,
   Checklist,
@@ -15,6 +16,145 @@ import type {
 import { BOARD_ID, supabase } from '../lib/supabase'
 import { useAuthStore } from './auth'
 import type { Json } from '../lib/database.types'
+
+const RUNFF_META_PREFIX = '\n\n<!--RUNFF_META:'
+const RUNFF_META_SUFFIX = '-->\n'
+
+export interface CardRunffMeta {
+  organizer?: string
+  eventName?: string
+  aportes?: Aporte[]
+}
+
+export function parseRunffMeta(description: string | null | undefined): {
+  cleanDescription: string
+  meta: CardRunffMeta
+} {
+  const raw = description ?? ''
+  const idx = raw.indexOf(RUNFF_META_PREFIX)
+  if (idx === -1) {
+    return { cleanDescription: raw, meta: {} }
+  }
+
+  const cleanDescription = raw.slice(0, idx)
+  const metaStr = raw.slice(idx + RUNFF_META_PREFIX.length)
+  const endIdx = metaStr.indexOf(RUNFF_META_SUFFIX)
+  const jsonStr =
+    endIdx !== -1 ? metaStr.slice(0, endIdx) : metaStr.replace(/-->$/, '')
+
+  try {
+    const meta = JSON.parse(jsonStr) as CardRunffMeta
+    return { cleanDescription, meta }
+  } catch {
+    return { cleanDescription: raw, meta: {} }
+  }
+}
+
+export function buildRunffDescription(
+  cleanDescription: string,
+  meta: CardRunffMeta,
+): string {
+  const clean = (cleanDescription ?? '').trimEnd()
+  const hasMeta =
+    (meta.organizer && meta.organizer.trim()) ||
+    (meta.eventName && meta.eventName.trim()) ||
+    (meta.aportes && meta.aportes.length > 0)
+
+  if (!hasMeta) return clean
+  const jsonStr = JSON.stringify({
+    organizer: meta.organizer?.trim() || undefined,
+    eventName: meta.eventName?.trim() || undefined,
+    aportes: meta.aportes && meta.aportes.length > 0 ? meta.aportes : undefined,
+  })
+  return `${clean}${RUNFF_META_PREFIX}${jsonStr}${RUNFF_META_SUFFIX}`
+}
+
+export interface CardAporteStats {
+  totalAmount: number
+  latestAporte: Aporte | null
+  activeAporte: Aporte | null
+  status: 'active' | 'ending_soon' | 'expired' | 'upcoming' | 'none'
+  daysRemaining?: number
+}
+
+export function getCardAporteStats(
+  card: Card | null | undefined,
+): CardAporteStats {
+  if (!card || !card.aportes || card.aportes.length === 0) {
+    return {
+      totalAmount: 0,
+      latestAporte: null,
+      activeAporte: null,
+      status: 'none',
+    }
+  }
+
+  const totalAmount = card.aportes.reduce(
+    (acc, ap) => acc + (Number(ap.amount) || 0),
+    0,
+  )
+
+  const sorted = [...card.aportes].sort((a, b) =>
+    (b.startDate || b.date).localeCompare(a.startDate || a.date),
+  )
+  const latestAporte = sorted[0] ?? null
+
+  const todayStr = new Date().toISOString().slice(0, 10)
+
+  const activeAporte =
+    card.aportes.find((ap) => {
+      const s = ap.startDate || ap.date
+      const e = ap.endDate || ap.startDate || ap.date
+      return s <= todayStr && todayStr <= e
+    }) ?? null
+
+  const targetAporte = activeAporte ?? latestAporte
+
+  if (!targetAporte) {
+    return {
+      totalAmount,
+      latestAporte: null,
+      activeAporte: null,
+      status: 'none',
+    }
+  }
+
+  const startDate = targetAporte.startDate || targetAporte.date
+  const endDate = targetAporte.endDate || startDate
+
+  if (endDate < todayStr) {
+    return {
+      totalAmount,
+      latestAporte,
+      activeAporte: null,
+      status: 'expired',
+    }
+  }
+
+  if (startDate > todayStr) {
+    return {
+      totalAmount,
+      latestAporte,
+      activeAporte: null,
+      status: 'upcoming',
+    }
+  }
+
+  const endD = new Date(endDate)
+  const todayD = new Date(todayStr)
+  const diffTime = endD.getTime() - todayD.getTime()
+  const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+  const status = daysRemaining <= 2 ? 'ending_soon' : 'active'
+
+  return {
+    totalAmount,
+    latestAporte,
+    activeAporte: targetAporte,
+    status,
+    daysRemaining,
+  }
+}
 
 function createId(prefix: string) {
   return `${prefix}-${crypto.randomUUID().slice(0, 8)}`
@@ -380,24 +520,30 @@ export const useBoardStore = defineStore('board', () => {
           attachmentsByCard.set(row.card_id, list)
         }
 
-        cards.value = (snapshot.cards ?? []).map((row) => ({
-          id: row.id,
-          columnId: row.column_id,
-          title: row.title,
-          description: row.description,
-          labelIds: labelsByCard.get(row.id) ?? [],
-          memberIds: membersByCard.get(row.id) ?? [],
-          startDate: row.start_date ?? null,
-          dueDate: row.due_date,
-          checklists: asChecklists(row.checklists),
-          comments: commentsByCard.get(row.id) ?? [],
-          attachments: attachmentsByCard.get(row.id) ?? [],
-          completed: row.completed,
-          archivedAt: row.archived_at ?? null,
-          position: row.position,
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
-        }))
+        cards.value = (snapshot.cards ?? []).map((row) => {
+          const { cleanDescription, meta } = parseRunffMeta(row.description)
+          return {
+            id: row.id,
+            columnId: row.column_id,
+            title: row.title,
+            description: cleanDescription,
+            organizer: meta.organizer,
+            eventName: meta.eventName,
+            aportes: meta.aportes ?? [],
+            labelIds: labelsByCard.get(row.id) ?? [],
+            memberIds: membersByCard.get(row.id) ?? [],
+            startDate: row.start_date ?? null,
+            dueDate: row.due_date,
+            checklists: asChecklists(row.checklists),
+            comments: commentsByCard.get(row.id) ?? [],
+            attachments: attachmentsByCard.get(row.id) ?? [],
+            completed: row.completed,
+            archivedAt: row.archived_at ?? null,
+            position: row.position,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+          }
+        })
 
         ready.value = true
         // Evita eco imediato do realtime após o próprio load/sync
@@ -853,8 +999,18 @@ export const useBoardStore = defineStore('board', () => {
     const dbPatch: Record<string, unknown> = {
       updated_at: next.updatedAt,
     }
-    if (patch.title !== undefined) dbPatch.title = patch.title
-    if (patch.description !== undefined) dbPatch.description = patch.description
+    if (
+      patch.description !== undefined ||
+      patch.organizer !== undefined ||
+      patch.eventName !== undefined ||
+      patch.aportes !== undefined
+    ) {
+      dbPatch.description = buildRunffDescription(next.description, {
+        organizer: next.organizer,
+        eventName: next.eventName,
+        aportes: next.aportes,
+      })
+    }
     if (patch.startDate !== undefined) dbPatch.start_date = patch.startDate
     if (patch.dueDate !== undefined) dbPatch.due_date = patch.dueDate
     if (patch.completed !== undefined) dbPatch.completed = patch.completed
@@ -915,6 +1071,37 @@ export const useBoardStore = defineStore('board', () => {
       return false
     }
     return true
+  }
+
+  async function addAporte(
+    cardId: string,
+    aporteData: Omit<Aporte, 'id'>,
+  ) {
+    const card = cards.value.find((c) => c.id === cardId)
+    if (!card) return
+    const aporte: Aporte = {
+      id: createId('ap'),
+      ...aporteData,
+    }
+    const currentAportes = card.aportes ?? []
+    const updatedAportes = [aporte, ...currentAportes]
+    await updateCard(cardId, { aportes: updatedAportes })
+  }
+
+  async function deleteAporte(cardId: string, aporteId: string) {
+    const card = cards.value.find((c) => c.id === cardId)
+    if (!card) return
+    const currentAportes = card.aportes ?? []
+    const updatedAportes = currentAportes.filter((ap) => ap.id !== aporteId)
+    await updateCard(cardId, { aportes: updatedAportes })
+  }
+
+  async function updateCardOrganizerInfo(
+    cardId: string,
+    organizer: string,
+    eventName: string,
+  ) {
+    await updateCard(cardId, { organizer, eventName })
   }
 
   async function addComment(cardId: string, body: string, authorId?: string) {
@@ -1620,6 +1807,9 @@ export const useBoardStore = defineStore('board', () => {
     archiveCard,
     unarchiveCard,
     deleteCard,
+    addAporte,
+    deleteAporte,
+    updateCardOrganizerInfo,
     addComment,
     updateComment,
     deleteComment,

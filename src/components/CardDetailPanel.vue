@@ -18,16 +18,19 @@ import {
   GripVertical,
   Italic,
   Link2,
+  Megaphone,
   MessageSquare,
   MoreHorizontal,
   Paperclip,
   Pencil,
   Plus,
   Trash2,
+  Trophy,
+  User,
   X,
 } from '@lucide/vue'
 import draggable from 'vuedraggable'
-import { useBoardStore } from '../stores/board'
+import { getCardAporteStats, useBoardStore } from '../stores/board'
 import { useAuthStore } from '../stores/auth'
 import MemberAvatar from './MemberAvatar.vue'
 import LabelPicker from './LabelPicker.vue'
@@ -61,6 +64,16 @@ const cardMenuOpen = ref(false)
 const mentionOpen = ref(false)
 const mentionQuery = ref('')
 const mentionStart = ref(-1)
+
+// Estado da Gestão de Aportes & Organizador (Runff / Meta Ads)
+const organizerDraft = ref('')
+const eventNameDraft = ref('')
+const showAporteForm = ref(false)
+const aporteAmount = ref<number | ''>('')
+const aporteDate = ref(new Date().toISOString().slice(0, 10))
+const aporteStartDate = ref(new Date().toISOString().slice(0, 10))
+const aporteEndDate = ref('')
+const aporteNotes = ref('')
 
 const anyEphemeralOpen = computed(
   () =>
@@ -125,6 +138,8 @@ function onKeydown(event: KeyboardEvent) {
   }
 }
 
+const aporteStats = computed(() => getCardAporteStats(card.value))
+
 watch(
   card,
   async (value) => {
@@ -136,6 +151,8 @@ watch(
 
     draftTitle.value = value.title
     draftDescription.value = value.description
+    organizerDraft.value = value.organizer ?? ''
+    eventNameDraft.value = value.eventName ?? ''
     commentBody.value = ''
     editingCommentId.value = null
     cardMenuOpen.value = false
@@ -147,6 +164,69 @@ watch(
   },
   { immediate: true },
 )
+
+function saveOrganizerInfo() {
+  if (!card.value) return
+  const org = organizerDraft.value.trim()
+  const evt = eventNameDraft.value.trim()
+  if (
+    org === (card.value.organizer ?? '') &&
+    evt === (card.value.eventName ?? '')
+  ) {
+    return
+  }
+  void board.updateCardOrganizerInfo(card.value.id, org, evt)
+}
+
+function submitNewAporte() {
+  if (!card.value) return
+  const amountNum = Number(aporteAmount.value)
+  if (!amountNum || amountNum <= 0) return
+
+  const startDate =
+    aporteStartDate.value ||
+    aporteDate.value ||
+    new Date().toISOString().slice(0, 10)
+  let endDate = aporteEndDate.value
+  if (!endDate) {
+    const d = new Date(startDate)
+    d.setDate(d.getDate() + 7)
+    endDate = d.toISOString().slice(0, 10)
+  }
+
+  void board.addAporte(card.value.id, {
+    amount: amountNum,
+    date: aporteDate.value || startDate,
+    startDate,
+    endDate,
+    notes: aporteNotes.value.trim() || undefined,
+  })
+
+  aporteAmount.value = ''
+  aporteNotes.value = ''
+  showAporteForm.value = false
+}
+
+function removeAporte(aporteId: string) {
+  if (!card.value) return
+  if (window.confirm('Excluir este registro de aporte?')) {
+    void board.deleteAporte(card.value.id, aporteId)
+  }
+}
+
+function formatCurrency(val: number) {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(val)
+}
+
+function formatDateBr(dateStr: string) {
+  if (!dateStr) return ''
+  const [y, m, d] = dateStr.split('-').map(Number)
+  if (!y || !m || !d) return dateStr
+  return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`
+}
 
 onBeforeUnmount(() => {
   document.body.style.overflow = ''
@@ -736,6 +816,213 @@ function renderCommentBody(body: string) {
                 >
                   Remover datas
                 </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- SEÇÃO DE GESTÃO DE ORGANIZADOR E APORTES (RUNFF / META ADS) -->
+          <section class="rounded-2xl border border-white/10 bg-surface/40 p-4 space-y-4">
+            <div class="flex items-center justify-between gap-2 border-b border-white/10 pb-3">
+              <div class="flex items-center gap-2">
+                <div class="flex size-7 items-center justify-center rounded-lg bg-orange-500/20 text-orange-400">
+                  <Megaphone :size="16" />
+                </div>
+                <div>
+                  <h3 class="text-sm font-bold text-text-primary">Gestão da Campanha (Runff / Meta Ads)</h3>
+                  <p class="text-[11px] text-text-muted">Organizador, Evento e Histórico de Aportes de Investimento</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-lg bg-accent/15 px-2.5 py-1 text-xs font-semibold text-accent transition-colors hover:bg-accent/25"
+                @click="showAporteForm = !showAporteForm"
+              >
+                <Plus :size="14" />
+                Novo Aporte
+              </button>
+            </div>
+
+            <!-- Campos de Organizador e Evento -->
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label class="block">
+                <span class="mb-1 flex items-center gap-1.5 text-xs font-semibold text-text-muted">
+                  <User :size="13" class="text-accent" />
+                  Nome do Organizador
+                </span>
+                <input
+                  v-model="organizerDraft"
+                  type="text"
+                  placeholder="Ex: João da Silva"
+                  class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
+                  @blur="saveOrganizerInfo"
+                  @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
+                />
+              </label>
+
+              <label class="block">
+                <span class="mb-1 flex items-center gap-1.5 text-xs font-semibold text-text-muted">
+                  <Trophy :size="13" class="text-amber-400" />
+                  Nome do Evento
+                </span>
+                <input
+                  v-model="eventNameDraft"
+                  type="text"
+                  placeholder="Ex: Corrida Turística Boituva"
+                  class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
+                  @blur="saveOrganizerInfo"
+                  @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
+                />
+              </label>
+            </div>
+
+            <!-- Card de Status e Resumo do Investimento -->
+            <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-board-elevated/80 p-3">
+              <div>
+                <p class="text-[10px] uppercase tracking-wider font-semibold text-text-muted">Total Aportado neste Evento</p>
+                <p class="text-lg font-extrabold text-emerald-400">
+                  {{ formatCurrency(aporteStats.totalAmount) }}
+                </p>
+              </div>
+
+              <div>
+                <p class="text-[10px] uppercase tracking-wider font-semibold text-text-muted">Status da Veiculação</p>
+                <div class="mt-0.5 flex items-center gap-1.5">
+                  <span
+                    v-if="aporteStats.status === 'active'"
+                    class="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-300"
+                  >
+                    🟢 Em Veiculação ({{ aporteStats.daysRemaining }} dia(s) restante(s))
+                  </span>
+                  <span
+                    v-else-if="aporteStats.status === 'ending_soon'"
+                    class="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-bold text-amber-300"
+                  >
+                    🟡 Vence em breve ({{ aporteStats.daysRemaining }} dia(s))
+                  </span>
+                  <span
+                    v-else-if="aporteStats.status === 'expired'"
+                    class="inline-flex items-center gap-1 rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-bold text-red-300"
+                  >
+                    🔴 Veiculação Encerrada
+                  </span>
+                  <span
+                    v-else-if="aporteStats.status === 'upcoming'"
+                    class="inline-flex items-center gap-1 rounded-full bg-sky-500/20 px-2.5 py-0.5 text-xs font-bold text-sky-300"
+                  >
+                    🔵 Veiculação Futura
+                  </span>
+                  <span
+                    v-else
+                    class="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-text-muted"
+                  >
+                    Nenhum aporte registrado
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Form para Registro de Novo Aporte -->
+            <form
+              v-if="showAporteForm"
+              class="rounded-xl border border-accent/30 bg-board-elevated p-3.5 space-y-3"
+              @submit.prevent="submitNewAporte"
+            >
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-text-primary">Registrar Novo Aporte</span>
+                <button
+                  type="button"
+                  class="text-xs text-text-muted hover:text-text-primary"
+                  @click="showAporteForm = false"
+                >
+                  Cancelar
+                </button>
+              </div>
+
+              <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                <label class="block text-[11px] text-text-muted">
+                  Valor Aportado (R$)
+                  <input
+                    v-model.number="aporteAmount"
+                    type="number"
+                    step="0.01"
+                    placeholder="Ex: 500.00"
+                    class="mt-1 w-full rounded-lg border border-border-subtle bg-column px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
+                    required
+                  />
+                </label>
+
+                <label class="block text-[11px] text-text-muted">
+                  Início da Veiculação
+                  <input
+                    v-model="aporteStartDate"
+                    type="date"
+                    class="mt-1 w-full rounded-lg border border-border-subtle bg-column px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
+                    required
+                  />
+                </label>
+
+                <label class="block text-[11px] text-text-muted">
+                  Término da Veiculação
+                  <input
+                    v-model="aporteEndDate"
+                    type="date"
+                    class="mt-1 w-full rounded-lg border border-border-subtle bg-column px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
+                    required
+                  />
+                </label>
+              </div>
+
+              <label class="block text-[11px] text-text-muted">
+                Observação / Plataforma (opcional)
+                <input
+                  v-model="aporteNotes"
+                  type="text"
+                  placeholder="Ex: Meta Ads - Campanha Boituva"
+                  class="mt-1 w-full rounded-lg border border-border-subtle bg-column px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
+                />
+              </label>
+
+              <div class="flex justify-end gap-2 pt-1">
+                <button
+                  type="submit"
+                  class="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-board hover:bg-accent-hover"
+                >
+                  Salvar Aporte
+                </button>
+              </div>
+            </form>
+
+            <!-- Tabela / Histórico de Aportes -->
+            <div v-if="card.aportes?.length" class="space-y-2">
+              <p class="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+                Histórico de Aportes ({{ card.aportes.length }})
+              </p>
+              <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                <div
+                  v-for="ap in card.aportes"
+                  :key="ap.id"
+                  class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-surface/60 px-3 py-2 text-xs"
+                >
+                  <div>
+                    <span class="font-bold text-emerald-400 mr-2">
+                      {{ formatCurrency(ap.amount) }}
+                    </span>
+                    <span class="text-text-secondary">
+                      Veiculação: {{ formatDateBr(ap.startDate) }} até {{ formatDateBr(ap.endDate) }}
+                    </span>
+                    <p v-if="ap.notes" class="text-[10px] text-text-muted mt-0.5">
+                      {{ ap.notes }}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    class="rounded-md p-1 text-text-muted hover:bg-danger/15 hover:text-danger"
+                    title="Excluir aporte"
+                    @click="removeAporte(ap.id)"
+                  >
+                    <Trash2 :size="13" />
+                  </button>
+                </div>
               </div>
             </div>
           </section>
