@@ -372,7 +372,7 @@ function getMemberObj(memberId?: string | null) {
 </script>
 
 <template>
-  <div class="page-shell my-4 flex flex-1 flex-col gap-6 overflow-y-auto pb-24 pr-1">
+  <div class="page-shell my-4 flex flex-1 flex-col gap-6 overflow-y-auto no-scrollbar pb-24 pr-1">
     <!-- Header with Title & Period Controls -->
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
