@@ -274,3 +274,12 @@ VALUES
   ('l2', 'board-1', 'Importante', 'yellow'),
   ('l3', 'board-1', 'Normal', 'blue')
 ON CONFLICT (id) DO NOTHING;
+
+-- ========================================================
+-- 19. CRIAR BUCKETS DE STORAGE (AVATARS E CARD-ATTACHMENTS)
+-- ========================================================
+INSERT INTO storage.buckets (id, name, public)
+VALUES 
+  ('avatars', 'avatars', true),
+  ('card-attachments', 'card-attachments', true)
+ON CONFLICT (id) DO NOTHING;
