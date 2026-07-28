@@ -28,7 +28,7 @@ const title = computed(() => {
   if (mode.value === 'forgot') return 'Recuperar senha'
   if (mode.value === 'update-password') return 'Nova senha'
   if (mode.value === 'signup') return 'Criar conta'
-  return 'B2C TEAM'
+  return 'WORKSPACE HELEN'
 })
 
 const subtitle = computed(() => {
