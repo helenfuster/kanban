@@ -206,9 +206,9 @@ async function onToggleDone(event: Event) {
           <span
             v-if="dateMeta"
             :class="[
-              'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium',
-              dateMeta.tone === 'overdue' && 'bg-danger/20 text-danger',
-              dateMeta.tone === 'today' && 'bg-danger/20 text-danger',
+              'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold',
+              dateMeta.tone === 'overdue' && 'bg-danger/25 text-danger ring-1 ring-danger/40',
+              dateMeta.tone === 'today' && 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40',
               dateMeta.tone === 'ok' && 'bg-surface text-text-secondary',
               dateMeta.tone === 'done' && 'bg-success/15 text-success',
             ]"

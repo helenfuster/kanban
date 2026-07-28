@@ -239,25 +239,15 @@ export const useNotesStore = defineStore('notes', () => {
     pendingPatches.delete(id)
     if (!note || !patch || !Object.keys(patch).length) return
 
-    const auth = useAuthStore()
-    if (!auth.memberId) {
-      reportError('Faça login novamente para editar notas.')
-      return
-    }
-
     Object.assign(note, patch, { updatedAt: new Date().toISOString() })
     quietRealtime()
 
-    // Usa UPSERT (POST) em vez de UPDATE (PATCH).
-    // Alguns navegadores/extensões CORS bloqueiam PATCH no preflight,
-    // mesmo com o Supabase liberando o método.
     const row = {
       id: note.id,
       board_id: BOARD_ID,
       title: note.title,
       body: note.body,
       kind: note.kind,
-      author_id: note.authorId || auth.memberId,
       created_at: note.createdAt,
       updated_at: note.updatedAt,
     }

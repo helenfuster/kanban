@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
-import { Camera, Archive, LogOut, Menu, UserRound, X } from '@lucide/vue'
+import { Camera, Archive, Download, LogOut, Menu, UserRound, X } from '@lucide/vue'
 import { useBoardStore } from '../stores/board'
 import { useAuthStore } from '../stores/auth'
 import LabelFilterSelect from './LabelFilterSelect.vue'
-import NotificationCenter from './NotificationCenter.vue'
 import HeaderSearch from './HeaderSearch.vue'
 import ArchivedCardsModal from './ArchivedCardsModal.vue'
 
@@ -12,6 +11,23 @@ const board = useBoardStore()
 const auth = useAuthStore()
 const archivedModal = ref<{ openModal: () => void } | null>(null)
 const menuOpen = ref(false)
+
+function exportBackup() {
+  const data = {
+    board: board.title,
+    exportedAt: new Date().toISOString(),
+    columns: board.columns,
+    cards: board.cards,
+    labels: board.labels,
+  }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `kanban-backup-${new Date().toISOString().slice(0, 10)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 async function onAvatarChange(event: Event) {
   const input = event.target as HTMLInputElement
@@ -109,11 +125,19 @@ onBeforeUnmount(() => {
         </span>
       </button>
 
+      <button
+        type="button"
+        class="relative inline-flex size-8 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-white/10 hover:text-text-primary"
+        title="Exportar backup do quadro (JSON)"
+        aria-label="Exportar backup do quadro"
+        @click="exportBackup"
+      >
+        <Download :size="17" :stroke-width="2.25" />
+      </button>
+
       <div class="flex items-center gap-1 md:hidden">
         <LabelFilterSelect mini />
       </div>
-
-      <NotificationCenter />
 
       <label
         class="group relative flex size-8 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10 text-[10px] font-semibold text-white transition-colors hover:border-accent"
