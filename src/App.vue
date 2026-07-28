@@ -37,17 +37,11 @@ const NotesView = defineAsyncComponent({
   loader: () => import('./components/NotesView.vue'),
   ...asyncOpts,
 })
-const HubView = defineAsyncComponent({
-  loader: () => import('./components/HubView.vue'),
-  ...asyncOpts,
-})
-
 const tabViews: Record<NavTab, Component> = {
   board: markRaw(BoardView),
   agenda: markRaw(AgendaView),
   daily: markRaw(DailyView),
   notes: markRaw(NotesView),
-  hub: markRaw(HubView),
 }
 
 const auth = useAuthStore()

@@ -9,7 +9,6 @@ import LabelFilterSelect from './LabelFilterSelect.vue'
 import NotificationCenter from './NotificationCenter.vue'
 import HeaderSearch from './HeaderSearch.vue'
 import ArchivedCardsModal from './ArchivedCardsModal.vue'
-import logoSxB2c from '../assets/brand/sx-b2c.svg'
 
 const board = useBoardStore()
 const auth = useAuthStore()
@@ -76,20 +75,16 @@ onBeforeUnmount(() => {
     <div
       class="pointer-events-none absolute inset-x-0 flex justify-center md:hidden"
     >
-      <img
-        :src="logoSxB2c"
-        alt="SX B2C"
-        class="h-6 w-auto object-contain"
-      />
+      <div class="flex size-6 items-center justify-center rounded-md bg-white font-extrabold text-[11px] tracking-tighter text-black">
+        H
+      </div>
     </div>
 
     <!-- Desktop: logo + título -->
     <div class="hidden min-w-0 shrink items-center gap-3 md:flex">
-      <img
-        :src="logoSxB2c"
-        alt="SX B2C"
-        class="h-7 w-auto shrink-0 object-contain"
-      />
+      <div class="flex size-7 items-center justify-center rounded-lg bg-white font-black text-xs tracking-tighter text-black shadow-sm">
+        H
+      </div>
       <div class="h-6 w-px bg-white/15" />
       <h1 class="truncate text-base font-semibold tracking-tight text-text-primary">
         {{ board.title }}
@@ -210,7 +205,12 @@ onBeforeUnmount(() => {
           class="absolute inset-y-0 left-0 flex w-[min(100%,18rem)] flex-col border-r border-white/10 bg-board-elevated shadow-2xl"
         >
           <div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
-            <img :src="logoSxB2c" alt="SX B2C" class="h-6 w-auto object-contain" />
+            <div class="flex items-center gap-2">
+              <div class="flex size-6 items-center justify-center rounded-md bg-white font-extrabold text-[11px] tracking-tighter text-black">
+                H
+              </div>
+              <span class="text-xs font-bold tracking-wider text-white uppercase">HELEN</span>
+            </div>
             <button
               type="button"
               class="rounded-lg p-1.5 text-text-secondary hover:bg-white/10 hover:text-text-primary"

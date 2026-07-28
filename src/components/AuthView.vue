@@ -2,7 +2,6 @@
 import { computed, ref, watch } from 'vue'
 import { Eye, EyeOff } from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
-import logoSxB2c from '../assets/brand/sx-b2c.svg'
 
 type AuthMode = 'login' | 'signup' | 'forgot' | 'update-password'
 
@@ -112,7 +111,9 @@ async function submit() {
       @submit.prevent="submit"
     >
       <div class="mb-6 flex flex-col items-center gap-3 text-center">
-        <img :src="logoSxB2c" alt="SX B2C" class="h-10 w-auto object-contain" />
+        <div class="flex size-12 items-center justify-center rounded-xl bg-white font-black text-xl tracking-tighter text-black shadow-lg">
+          H
+        </div>
         <div>
           <h1 class="text-xl font-semibold text-text-primary">{{ title }}</h1>
           <p class="mt-1 text-sm text-text-secondary">{{ subtitle }}</p>

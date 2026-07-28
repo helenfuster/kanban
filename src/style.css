@@ -1,23 +1,23 @@
 @import 'tailwindcss';
 
 @theme {
-  /* Identidade B2C — base escura com azul SX */
-  --color-board: #070d13;
-  --color-board-elevated: #111a25;
-  --color-column: #16212e;
-  --color-column-hover: #1e2b3a;
-  --color-card: #212e3e;
-  --color-card-hover: #29384a;
-  --color-surface: #1a2533;
-  --color-border-subtle: #33455a;
-  --color-text-primary: #f1f6fb;
-  --color-text-secondary: #a8b9cb;
-  --color-text-muted: #7d90a4;
-  --color-accent: #39bcff;
-  --color-accent-hover: #6bd0ff;
-  --color-danger: #fb8585;
-  --color-success: #5ce68f;
-  --font-sans: 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+  /* Identidade Visual Minimalista High-End — Preto, Tons de Cinza e Branco */
+  --color-board: #09090b;
+  --color-board-elevated: #121215;
+  --color-column: #18181b;
+  --color-column-hover: #27272a;
+  --color-card: #27272a;
+  --color-card-hover: #3f3f46;
+  --color-surface: #1f1f23;
+  --color-border-subtle: #3f3f46;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #71717a;
+  --color-accent: #ffffff;
+  --color-accent-hover: #e4e4e7;
+  --color-danger: #f87171;
+  --color-success: #4ade80;
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 @layer base {
@@ -44,7 +44,6 @@
     box-sizing: border-box;
   }
 
-  /* Área de conteúdo padronizada (Agenda / Tarefas) */
   .page-shell {
     width: min(100% - 1.5rem, 85%);
     max-width: 85%;
@@ -57,7 +56,6 @@
     }
   }
 
-  /* Quadro: colunas centralizadas + scroll horizontal quando passam da tela */
   .board-scroll {
     scroll-padding-inline: 1.5rem;
     scrollbar-gutter: stable;
@@ -68,20 +66,20 @@
   }
 
   .board-scroll::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.03);
     border-radius: 999px;
     margin-inline: 1.5rem;
   }
 
   .board-scroll::-webkit-scrollbar-thumb {
-    background: #5a7189;
+    background: #3f3f46;
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: padding-box;
   }
 
   .board-scroll::-webkit-scrollbar-thumb:hover {
-    background: #7d90a4;
+    background: #52525b;
     background-clip: padding-box;
   }
 
@@ -91,31 +89,19 @@
 }
 
 @layer components {
-  /* Fundo unificado: gradiente azul sutil (sem foto) */
+  /* Fundo minimalista preto/cinza */
   .app-bg {
-    background-color: var(--color-board);
+    background-color: #09090b;
     background-image:
       radial-gradient(
-        ellipse 110% 70% at 8% -10%,
-        rgba(57, 188, 255, 0.13),
-        transparent 50%
-      ),
-      radial-gradient(
-        ellipse 80% 55% at 100% 5%,
-        rgba(57, 188, 255, 0.07),
-        transparent 46%
-      ),
-      radial-gradient(
-        ellipse 90% 45% at 50% 112%,
-        rgba(18, 56, 92, 0.24),
-        transparent 55%
+        ellipse 80% 50% at 50% -20%,
+        rgba(255, 255, 255, 0.06),
+        transparent 70%
       ),
       linear-gradient(
-        165deg,
-        #070d13 0%,
-        #0a1420 40%,
-        #0b1825 74%,
-        #060b11 100%
+        180deg,
+        #09090b 0%,
+        #000000 100%
       );
     background-attachment: fixed;
   }
@@ -127,34 +113,26 @@
   .card-drag {
     opacity: 1 !important;
     transform: rotate(2deg);
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.7);
   }
 
   .column-ghost {
     opacity: 0.4;
   }
 
-  /* Painéis / colunas: glass alinhado ao accent */
   .panel-glass,
   .column-glass {
-    background: color-mix(in srgb, var(--color-column) 88%, transparent);
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(24, 24, 27, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow:
-      0 10px 34px rgba(0, 0, 0, 0.45),
-      inset 0 1px 0 rgba(255, 255, 255, 0.07);
-    backdrop-filter: blur(16px) saturate(1.2);
-    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+      0 10px 34px rgba(0, 0, 0, 0.7),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
   }
 
   .panel-glass-accent {
-    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
-  }
-
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    .panel-glass,
-    .column-glass {
-      background: color-mix(in srgb, var(--color-column) 98%, transparent);
-    }
+    border-color: rgba(255, 255, 255, 0.2);
   }
 
   .markdown-body a {
@@ -236,7 +214,6 @@
     animation: daily-pin-pop 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
   }
 
-  /* Troca de abas: fade + leve deslocamento (sem corte seco) */
   .tab-stage {
     isolation: isolate;
   }
