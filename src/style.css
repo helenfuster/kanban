@@ -56,13 +56,33 @@
     }
   }
 
+  /* Oculta barras de rolagem verticais em todo o aplicativo mantendo a rolagem ativa */
+  * {
+    -ms-overflow-style: none;
+  }
+
+  .overflow-y-auto,
+  .overflow-y-scroll,
+  div:not(.board-scroll)::-webkit-scrollbar {
+    scrollbar-width: none;
+  }
+
+  div:not(.board-scroll)::-webkit-scrollbar {
+    display: none;
+    width: 0px;
+  }
+
+  /* Barra de Rolagem Horizontal Minimalista no Rodapé do Quadro */
   .board-scroll {
     scroll-padding-inline: 1.5rem;
     scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   }
 
   .board-scroll::-webkit-scrollbar {
-    height: 12px;
+    height: 6px;
+    display: block;
   }
 
   .board-scroll::-webkit-scrollbar-track {
@@ -72,15 +92,12 @@
   }
 
   .board-scroll::-webkit-scrollbar-thumb {
-    background: #3f3f46;
+    background: rgba(255, 255, 255, 0.2);
     border-radius: 999px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
   }
 
   .board-scroll::-webkit-scrollbar-thumb:hover {
-    background: #52525b;
-    background-clip: padding-box;
+    background: rgba(255, 255, 255, 0.35);
   }
 
   .board-track {
