@@ -128,6 +128,41 @@ const renewalAlertCampaigns = computed(() => {
   })
 })
 
+// Grouped critical campaigns by Organizer for the alert banner
+const renewalAlertOrganizers = computed(() => {
+  const groups: Record<
+    string,
+    {
+      organizer: string
+      events: Array<{
+        campaign: Campaign
+        status: string
+        daysRemaining: number
+      }>
+    }
+  > = {}
+
+  campaignCards.value.forEach((card) => {
+    const stats = getCardAporteStats(card as any)
+    if (stats.status === 'ending_soon' || stats.status === 'expired') {
+      const orgKey = card.organizer?.trim() || 'Sem Organizador'
+      if (!groups[orgKey]) {
+        groups[orgKey] = {
+          organizer: orgKey,
+          events: [],
+        }
+      }
+      groups[orgKey].events.push({
+        campaign: card,
+        status: stats.status,
+        daysRemaining: stats.daysRemaining ?? 0,
+      })
+    }
+  })
+
+  return Object.values(groups).sort((a, b) => a.organizer.localeCompare(b.organizer))
+})
+
 function calculateEventRoas(ev: WhatsappEventMetrics) {
   const rev = Number(ev.revenueAmount) || 0
   const spent = Number(ev.spentAmount) || 0
@@ -544,9 +579,9 @@ function deleteCampaign(campaignId: string, title: string) {
         </div>
       </header>
 
-      <!-- PAINEL DE ALERTA DE RENOVAÇÃO URGENTE (VENCENDO EM 2 DIAS OU ENCERRADAS) -->
+      <!-- PAINEL DE ALERTA DE RENOVAÇÃO URGENTE (AGRUPADO POR ORGANIZADOR) -->
       <div
-        v-if="renewalAlertCampaigns.length > 0"
+        v-if="renewalAlertOrganizers.length > 0"
         class="mb-6 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 shadow-lg shadow-amber-500/5 space-y-3"
       >
         <div class="flex items-center justify-between gap-2 border-b border-amber-500/20 pb-2.5">
@@ -556,51 +591,62 @@ function deleteCampaign(campaignId: string, title: string) {
             </div>
             <div>
               <h2 class="text-sm font-extrabold text-amber-200">
-                🔔 Alerta de Renovação de Aporte ({{ renewalAlertCampaigns.length }} evento(s) crítico(s))
+                🔔 Alerta de Renovação de Aporte ({{ renewalAlertCampaigns.length }} evento(s) crítico(s) em {{ renewalAlertOrganizers.length }} organizador(es))
               </h2>
               <p class="text-[11px] text-amber-300/80">
-                Campanhas vencendo nos próximos 1 a 2 dias ou encerradas que necessitam de cobrança de novo aporte.
+                Campanhas vencendo nos próximos 1 a 2 dias ou encerradas agrupadas por organizador.
               </p>
             </div>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div
-            v-for="camp in renewalAlertCampaigns"
-            :key="camp.id"
-            class="flex items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-board-elevated/90 p-3 text-xs"
+            v-for="orgGroup in renewalAlertOrganizers"
+            :key="orgGroup.organizer"
+            class="flex flex-col justify-between gap-2.5 rounded-xl border border-amber-500/30 bg-board-elevated/90 p-3.5 text-xs shadow-md"
           >
-            <div>
-              <span class="font-extrabold text-text-primary block truncate max-w-[180px]">
-                🏆 {{ camp.eventName }}
-              </span>
-              <span class="text-[11px] text-text-muted block">
-                👤 {{ camp.organizer }}
-              </span>
-              <span
-                :class="[
-                  'inline-flex items-center gap-1 font-bold text-[10px] mt-1',
-                  getCardAporteStats(camp as any).status === 'expired'
-                    ? 'text-red-400'
-                    : 'text-amber-300',
-                ]"
-              >
-                {{
-                  getCardAporteStats(camp as any).status === 'expired'
-                    ? '🔴 Veiculação Encerrada'
-                    : `🟡 Vence em ${getCardAporteStats(camp as any).daysRemaining} dia(s)`
-                }}
-              </span>
+            <div class="space-y-2">
+              <!-- Cabeçalho do Organizador no Card de Alerta -->
+              <div class="flex items-center justify-between gap-2 border-b border-white/10 pb-2">
+                <span class="font-black text-text-primary text-xs flex items-center gap-1.5 truncate">
+                  👤 {{ orgGroup.organizer }}
+                </span>
+                <span class="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                  {{ orgGroup.events.length }} evento(s)
+                </span>
+              </div>
+
+              <!-- Lista dos Eventos do Organizador prestes a vencer (um embaixo do outro) -->
+              <div class="space-y-1.5">
+                <div
+                  v-for="item in orgGroup.events"
+                  :key="item.campaign.id"
+                  class="flex items-center justify-between gap-2 rounded-lg bg-surface/60 p-2 text-[11px]"
+                >
+                  <span class="font-extrabold text-amber-200 truncate max-w-[160px]" :title="item.campaign.eventName">
+                    🏆 {{ item.campaign.eventName }}
+                  </span>
+                  <span
+                    :class="[
+                      'font-bold text-[10px] shrink-0',
+                      item.status === 'expired' ? 'text-red-400' : 'text-amber-300',
+                    ]"
+                  >
+                    {{ item.status === 'expired' ? '🔴 Encerrado' : `🟡 Vence em ${item.daysRemaining}d` }}
+                  </span>
+                </div>
+              </div>
             </div>
 
+            <!-- Botão Único de Cobrança Agrupada -->
             <button
               type="button"
-              class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-500/20 px-2.5 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/30"
-              @click="openWhatsappModalForOrganizer(camp.organizer, camp)"
+              class="mt-1 inline-flex items-center justify-center gap-1.5 w-full rounded-lg bg-emerald-500/20 py-2 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/30"
+              @click="openWhatsappModalForOrganizer(orgGroup.organizer)"
             >
               <MessageCircle :size="14" />
-              Cobrar
+              Cobrar {{ orgGroup.organizer }} ({{ orgGroup.events.length }} evento(s))
             </button>
           </div>
         </div>
@@ -781,7 +827,7 @@ function deleteCampaign(campaignId: string, title: string) {
             </div>
 
             <div class="flex items-center gap-4">
-              <!-- Botão de Cobrança Agrupada do Organizador (Filtra eventos a 1-2 dias do fim) -->
+              <!-- Botão de Cobrança Agrupada do Organizador -->
               <button
                 type="button"
                 class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/30"
