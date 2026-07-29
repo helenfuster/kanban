@@ -642,7 +642,7 @@ function deleteCampaign(campaignId: string, title: string) {
 </script>
 
 <template>
-  <div class="panel-glass relative mx-auto flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl shadow-xl shadow-black/20">
+  <div class="panel-glass relative mx-auto flex h-full min-h-0 w-full max-w-[85%] flex-1 flex-col overflow-hidden rounded-2xl shadow-xl shadow-black/20 my-2">
     <div class="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8 sm:py-7">
       
       <!-- Cabeçalho Principal -->

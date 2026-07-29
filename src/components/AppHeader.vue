@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
-import { Camera, Archive, Download, LogOut, Menu, UserRound, X } from '@lucide/vue'
+import { Archive, Camera, Download, LogOut, Menu, UserRound, X } from '@lucide/vue'
 import { useBoardStore } from '../stores/board'
 import { useAuthStore } from '../stores/auth'
-import LabelFilterSelect from './LabelFilterSelect.vue'
 import HeaderSearch from './HeaderSearch.vue'
 import ArchivedCardsModal from './ArchivedCardsModal.vue'
 
@@ -119,12 +118,7 @@ onBeforeUnmount(() => {
       </h1>
     </div>
 
-    <!-- Desktop: filtro de etiquetas -->
-    <div class="hidden min-w-0 flex-1 items-center justify-center gap-2 px-2 md:flex">
-      <LabelFilterSelect compact />
-    </div>
-
-    <!-- Direita: busca + filtro mini (mobile) + notificações + avatar -->
+    <!-- Direita: busca + notificações + avatar -->
     <div class="relative z-20 ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
       <HeaderSearch />
 
@@ -154,10 +148,6 @@ onBeforeUnmount(() => {
       >
         <Download :size="17" :stroke-width="2.25" />
       </button>
-
-      <div class="flex items-center gap-1 md:hidden">
-        <LabelFilterSelect mini />
-      </div>
 
       <label
         class="group relative flex size-8 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10 text-[10px] font-semibold text-white transition-colors hover:border-accent"
