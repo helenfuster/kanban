@@ -9,7 +9,7 @@ import {
 } from '@lucide/vue'
 import type { Card } from '../types/board'
 import { LABEL_COLOR_MAP } from '../types/board'
-import { getCardAporteStats, useBoardStore } from '../stores/board'
+import { useBoardStore } from '../stores/board'
 import MemberAvatar from './MemberAvatar.vue'
 
 const props = defineProps<{
@@ -20,14 +20,6 @@ const board = useBoardStore()
 
 const labels = computed(() => board.getLabelsForCard(props.card))
 const members = computed(() => board.getMembersForCard(props.card))
-const aporteStats = computed(() => getCardAporteStats(props.card))
-
-function formatCurrency(val: number) {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(val)
-}
 
 const isDone = computed(() => {
   const doneColumn = board.columns.find((column) => column.isDoneColumn)
@@ -161,52 +153,6 @@ async function onToggleDone(event: Event) {
         >
           {{ card.title }}
         </h3>
-
-        <!-- Badges do Organizador & Evento da Runff -->
-        <div v-if="card.organizer || card.eventName" class="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-          <span
-            v-if="card.organizer"
-            class="inline-flex items-center gap-1 rounded bg-accent/15 px-1.5 py-0.5 font-semibold text-accent"
-            :title="`Organizador: ${card.organizer}`"
-          >
-            👤 {{ card.organizer }}
-          </span>
-          <span
-            v-if="card.eventName"
-            class="inline-flex items-center gap-1 rounded bg-amber-400/15 px-1.5 py-0.5 font-semibold text-amber-300"
-            :title="`Evento: ${card.eventName}`"
-          >
-            🏆 {{ card.eventName }}
-          </span>
-        </div>
-
-        <!-- Badges de Aportes & Status da Campanha -->
-        <div v-if="aporteStats.status !== 'none'" class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
-          <span
-            class="inline-flex items-center gap-1 rounded-md bg-emerald-500/20 px-1.5 py-0.5 font-bold text-emerald-300"
-            title="Total aportado neste evento"
-          >
-            💰 {{ formatCurrency(aporteStats.totalAmount) }}
-          </span>
-          <span
-            v-if="aporteStats.status === 'active'"
-            class="inline-flex items-center gap-1 rounded-md bg-emerald-500/20 px-1.5 py-0.5 font-bold text-emerald-400"
-          >
-            🟢 {{ aporteStats.daysRemaining }}d restante(s)
-          </span>
-          <span
-            v-else-if="aporteStats.status === 'ending_soon'"
-            class="inline-flex items-center gap-1 rounded-md bg-amber-500/20 px-1.5 py-0.5 font-bold text-amber-300"
-          >
-            🟡 Vence em {{ aporteStats.daysRemaining }}d
-          </span>
-          <span
-            v-else-if="aporteStats.status === 'expired'"
-            class="inline-flex items-center gap-1 rounded-md bg-red-500/20 px-1.5 py-0.5 font-semibold text-red-300"
-          >
-            🔴 Encerrado
-          </span>
-        </div>
 
         <div v-if="fullDescription" class="mt-1 text-[11px] leading-relaxed text-text-muted">
           <p class="line-clamp-2 group-hover:hidden" :title="fullDescription">
