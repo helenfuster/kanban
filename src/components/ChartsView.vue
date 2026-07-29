@@ -8,6 +8,7 @@ import {
   Flame,
   LayoutGrid,
   Megaphone,
+  Pencil,
   Plus,
   ShoppingBag,
   Trash2,
@@ -29,10 +30,9 @@ export interface HubLink {
   brand: 'runff' | 'kalfe'
   category: 'planilha' | 'marketplace' | 'meta_ads' | 'outro'
   description?: string
-  isCustom?: boolean
 }
 
-const STORAGE_LINKS_KEY = 'kanban_hub_custom_links_v1'
+const STORAGE_LINKS_KEY = 'kanban_hub_all_links_v2'
 
 const defaultLinks: HubLink[] = [
   // Runff
@@ -111,34 +111,43 @@ const period = ref<PeriodType>('daily')
 const sourceFilter = ref<SourceFilter>('all')
 const hoveredBarIndex = ref<number | null>(null)
 
-// Custom Links State
+// Links State
 const hubLinks = ref<HubLink[]>([])
 const showAddLinkModal = ref(false)
+const showEditLinkModal = ref(false)
 
+// Add Form Fields
 const newLinkTitle = ref('')
 const newLinkUrl = ref('')
 const newLinkBrand = ref<'runff' | 'kalfe'>('runff')
 const newLinkCategory = ref<'planilha' | 'marketplace' | 'meta_ads' | 'outro'>('planilha')
 const newLinkDesc = ref('')
 
+// Edit Form Fields
+const editingLinkId = ref<string | null>(null)
+const editLinkTitle = ref('')
+const editLinkUrl = ref('')
+const editLinkBrand = ref<'runff' | 'kalfe'>('runff')
+const editLinkCategory = ref<'planilha' | 'marketplace' | 'meta_ads' | 'outro'>('planilha')
+const editLinkDesc = ref('')
+
 function loadLinks() {
   try {
     const raw = localStorage.getItem(STORAGE_LINKS_KEY)
     if (raw) {
-      const custom: HubLink[] = JSON.parse(raw)
-      hubLinks.value = [...defaultLinks, ...custom]
+      hubLinks.value = JSON.parse(raw)
     } else {
       hubLinks.value = [...defaultLinks]
+      saveLinks()
     }
   } catch {
     hubLinks.value = [...defaultLinks]
   }
 }
 
-function saveCustomLinks() {
+function saveLinks() {
   try {
-    const customOnly = hubLinks.value.filter((l) => l.isCustom)
-    localStorage.setItem(STORAGE_LINKS_KEY, JSON.stringify(customOnly))
+    localStorage.setItem(STORAGE_LINKS_KEY, JSON.stringify(hubLinks.value))
   } catch (err) {
     console.error('Error saving links', err)
   }
@@ -154,17 +163,16 @@ function submitAddLink() {
   }
 
   const newLink: HubLink = {
-    id: `custom-${Date.now()}`,
+    id: `link-${Date.now()}`,
     title,
     url,
     brand: newLinkBrand.value,
     category: newLinkCategory.value,
     description: newLinkDesc.value.trim() || undefined,
-    isCustom: true,
   }
 
   hubLinks.value.unshift(newLink)
-  saveCustomLinks()
+  saveLinks()
 
   // Reset Form
   newLinkTitle.value = ''
@@ -173,10 +181,41 @@ function submitAddLink() {
   showAddLinkModal.value = false
 }
 
+function openEditLinkModal(link: HubLink) {
+  editingLinkId.value = link.id
+  editLinkTitle.value = link.title
+  editLinkUrl.value = link.url
+  editLinkBrand.value = link.brand
+  editLinkCategory.value = link.category
+  editLinkDesc.value = link.description || ''
+  showEditLinkModal.value = true
+}
+
+function submitEditLink() {
+  if (!editingLinkId.value) return
+  const link = hubLinks.value.find((l) => l.id === editingLinkId.value)
+  if (!link) return
+
+  let url = editLinkUrl.value.trim()
+  if (!/^https?:\/\//i.test(url)) {
+    url = `https://${url}`
+  }
+
+  link.title = editLinkTitle.value.trim()
+  link.url = url
+  link.brand = editLinkBrand.value
+  link.category = editLinkCategory.value
+  link.description = editLinkDesc.value.trim() || undefined
+
+  saveLinks()
+  showEditLinkModal.value = false
+  editingLinkId.value = null
+}
+
 function deleteLink(linkId: string) {
   if (window.confirm('Excluir este atalho de planilha/link?')) {
     hubLinks.value = hubLinks.value.filter((l) => l.id !== linkId)
-    saveCustomLinks()
+    saveLinks()
   }
 }
 
@@ -460,9 +499,6 @@ const maxChartValue = computed(() => {
           </div>
           Hub & Central de Operações
         </h1>
-        <p class="mt-1 text-xs text-text-secondary">
-          Atalhos de planilhas, gerenciadores e analytics organizados por marca (Runff Eventos e Kalfe Calçados).
-        </p>
       </div>
 
       <div class="flex items-center gap-2">
@@ -480,17 +516,14 @@ const maxChartValue = computed(() => {
     <!-- SEÇÕES DE PLANILHAS E ATALHOS (RUNFF vs KALFE) -->
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
       
-      <!-- SEÇÃO 🟧 RUNFF EVENTOS -->
+      <!-- SEÇÃO 🟧 RUNFF -->
       <div class="panel-glass flex flex-col rounded-2xl p-5 space-y-4 border border-orange-500/20 bg-orange-500/5">
         <div class="flex items-center justify-between border-b border-orange-500/20 pb-3">
           <div class="flex items-center gap-2.5">
             <div class="flex size-8 items-center justify-center rounded-xl bg-orange-500/20 text-orange-400">
               <Megaphone :size="18" />
             </div>
-            <div>
-              <h2 class="text-sm font-extrabold text-text-primary">🟧 Runff Eventos Esportivos</h2>
-              <p class="text-[11px] text-text-muted">Planilhas, ClickUp e Gerenciadores da Runff</p>
-            </div>
+            <h2 class="text-base font-extrabold text-text-primary">Runff</h2>
           </div>
           <span class="rounded-full bg-orange-500/20 px-2.5 py-0.5 text-[10px] font-bold text-orange-300">
             {{ runffLinks.length }} atalho(s)
@@ -508,16 +541,28 @@ const maxChartValue = computed(() => {
                 <span class="inline-flex items-center gap-1 rounded bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-orange-300">
                   {{ link.category === 'planilha' ? '📊 Planilha' : link.category === 'meta_ads' ? '📢 Meta Ads' : '🔗 Link' }}
                 </span>
-                <button
-                  v-if="link.isCustom"
-                  type="button"
-                  class="opacity-0 group-hover:opacity-100 text-text-muted hover:text-danger transition-opacity"
-                  title="Excluir link"
-                  @click="deleteLink(link.id)"
-                >
-                  <Trash2 :size="13" />
-                </button>
+                
+                <!-- Botões de Ação: Editar e Excluir -->
+                <div class="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                  <button
+                    type="button"
+                    class="rounded p-1 text-text-muted hover:bg-white/10 hover:text-text-primary"
+                    title="Editar atalho"
+                    @click="openEditLinkModal(link)"
+                  >
+                    <Pencil :size="13" />
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded p-1 text-text-muted hover:bg-danger/15 hover:text-danger"
+                    title="Excluir atalho"
+                    @click="deleteLink(link.id)"
+                  >
+                    <Trash2 :size="13" />
+                  </button>
+                </div>
               </div>
+
               <h3 class="mt-2 text-xs font-bold text-text-primary group-hover:text-orange-400 transition-colors">
                 {{ link.title }}
               </h3>
@@ -539,17 +584,14 @@ const maxChartValue = computed(() => {
         </div>
       </div>
 
-      <!-- SEÇÃO 🟢 KALFE CALÇADOS -->
+      <!-- SEÇÃO 🟢 KALFE -->
       <div class="panel-glass flex flex-col rounded-2xl p-5 space-y-4 border border-emerald-500/20 bg-emerald-500/5">
         <div class="flex items-center justify-between border-b border-emerald-500/20 pb-3">
           <div class="flex items-center gap-2.5">
             <div class="flex size-8 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400">
               <ShoppingBag :size="18" />
             </div>
-            <div>
-              <h2 class="text-sm font-extrabold text-text-primary">🟢 Kalfe Calçados & Marketplaces</h2>
-              <p class="text-[11px] text-text-muted">Mercado Livre, Netshoes, Zattini, Amazon & Ads</p>
-            </div>
+            <h2 class="text-base font-extrabold text-text-primary">Kalfe</h2>
           </div>
           <span class="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300">
             {{ kalfeLinks.length }} atalho(s)
@@ -567,16 +609,28 @@ const maxChartValue = computed(() => {
                 <span class="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-300">
                   {{ link.category === 'marketplace' ? '🛒 Marketplace' : link.category === 'planilha' ? '📊 Planilha' : '🔗 Link' }}
                 </span>
-                <button
-                  v-if="link.isCustom"
-                  type="button"
-                  class="opacity-0 group-hover:opacity-100 text-text-muted hover:text-danger transition-opacity"
-                  title="Excluir link"
-                  @click="deleteLink(link.id)"
-                >
-                  <Trash2 :size="13" />
-                </button>
+                
+                <!-- Botões de Ação: Editar e Excluir -->
+                <div class="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                  <button
+                    type="button"
+                    class="rounded p-1 text-text-muted hover:bg-white/10 hover:text-text-primary"
+                    title="Editar atalho"
+                    @click="openEditLinkModal(link)"
+                  >
+                    <Pencil :size="13" />
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded p-1 text-text-muted hover:bg-danger/15 hover:text-danger"
+                    title="Excluir atalho"
+                    @click="deleteLink(link.id)"
+                  >
+                    <Trash2 :size="13" />
+                  </button>
+                </div>
               </div>
+
               <h3 class="mt-2 text-xs font-bold text-text-primary group-hover:text-emerald-400 transition-colors">
                 {{ link.title }}
               </h3>
@@ -761,7 +815,7 @@ const maxChartValue = computed(() => {
               <div
                 v-for="(bar, index) in chartData"
                 :key="bar.dateKey"
-                class="group relative flex flex-1 flex-col items-center h-full justify-end"
+                class="group relative flex flex-col items-center h-full justify-end"
                 @mouseenter="hoveredBarIndex = index"
                 @mouseleave="hoveredBarIndex = null"
               >
@@ -834,7 +888,7 @@ const maxChartValue = computed(() => {
 
         <div class="space-y-3 text-xs">
           <label class="block">
-            <span class="font-bold text-text-muted block mb-1">Marca Pertencente *</span>
+            <span class="font-bold text-text-muted block mb-1">Empresa Pertencente *</span>
             <div class="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -846,7 +900,7 @@ const maxChartValue = computed(() => {
                 ]"
                 @click="newLinkBrand = 'runff'"
               >
-                🟧 Runff Eventos
+                🟧 Runff
               </button>
               <button
                 type="button"
@@ -858,7 +912,7 @@ const maxChartValue = computed(() => {
                 ]"
                 @click="newLinkBrand = 'kalfe'"
               >
-                🟢 Kalfe Calçados
+                🟢 Kalfe
               </button>
             </div>
           </label>
@@ -922,6 +976,124 @@ const maxChartValue = computed(() => {
             class="rounded-xl bg-accent px-4 py-2 text-xs font-bold text-board hover:bg-accent-hover"
           >
             Salvar Atalho
+          </button>
+        </div>
+      </form>
+    </div>
+  </Teleport>
+
+  <!-- MODAL: EDITAR LINK / PLANILHA -->
+  <Teleport to="body">
+    <div
+      v-if="showEditLinkModal"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div
+        class="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        @click="showEditLinkModal = false"
+      />
+      <form
+        class="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-board-elevated p-6 shadow-2xl space-y-4"
+        @submit.prevent="submitEditLink"
+      >
+        <div class="flex items-center justify-between border-b border-white/10 pb-3">
+          <h3 class="text-base font-bold text-text-primary">Editar Atalho / Planilha</h3>
+          <button
+            type="button"
+            class="text-text-muted hover:text-text-primary"
+            @click="showEditLinkModal = false"
+          >
+            <X :size="18" />
+          </button>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <label class="block">
+            <span class="font-bold text-text-muted block mb-1">Empresa Pertencente *</span>
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                :class="[
+                  'rounded-xl border p-2.5 font-bold transition-all text-center',
+                  editLinkBrand === 'runff'
+                    ? 'border-orange-500 bg-orange-500/20 text-orange-300'
+                    : 'border-white/10 bg-surface text-text-muted hover:text-text-primary',
+                ]"
+                @click="editLinkBrand = 'runff'"
+              >
+                🟧 Runff
+              </button>
+              <button
+                type="button"
+                :class="[
+                  'rounded-xl border p-2.5 font-bold transition-all text-center',
+                  editLinkBrand === 'kalfe'
+                    ? 'border-emerald-500 bg-emerald-500/20 text-emerald-300'
+                    : 'border-white/10 bg-surface text-text-muted hover:text-text-primary',
+                ]"
+                @click="editLinkBrand = 'kalfe'"
+              >
+                🟢 Kalfe
+              </button>
+            </div>
+          </label>
+
+          <label class="block">
+            <span class="font-bold text-text-muted block mb-1">Título do Atalho / Planilha *</span>
+            <input
+              v-model="editLinkTitle"
+              type="text"
+              class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
+              required
+            />
+          </label>
+
+          <label class="block">
+            <span class="font-bold text-text-muted block mb-1">URL / Link *</span>
+            <input
+              v-model="editLinkUrl"
+              type="text"
+              class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
+              required
+            />
+          </label>
+
+          <label class="block">
+            <span class="font-bold text-text-muted block mb-1">Categoria</span>
+            <select
+              v-model="editLinkCategory"
+              class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
+            >
+              <option value="planilha">📊 Planilha / Google Sheets</option>
+              <option value="marketplace">🛒 Marketplace (ML, Netshoes, Amazon, Zattini)</option>
+              <option value="meta_ads">📢 Meta / Google Ads</option>
+              <option value="outro">🔗 Outro Link Utilitário</option>
+            </select>
+          </label>
+
+          <label class="block">
+            <span class="font-bold text-text-muted block mb-1">Descrição Curta</span>
+            <input
+              v-model="editLinkDesc"
+              type="text"
+              class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
+            />
+          </label>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            class="rounded-xl px-4 py-2 text-xs text-text-muted hover:bg-white/5"
+            @click="showEditLinkModal = false"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            class="rounded-xl bg-accent px-4 py-2 text-xs font-bold text-board hover:bg-accent-hover"
+          >
+            Salvar Alterações
           </button>
         </div>
       </form>
