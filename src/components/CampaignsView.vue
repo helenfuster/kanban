@@ -19,6 +19,16 @@ import { useCampaignsStore } from '../stores/campaigns'
 import type { Aporte } from '../types/board'
 import type { Campaign } from '../stores/campaigns'
 
+export interface WhatsappEventMetrics {
+  campaignId: string
+  eventName: string
+  endDateText: string
+  salesCount: number | ''
+  spentAmount: number | ''
+  revenueAmount: number | ''
+  roas: number | string
+}
+
 const campaignsStore = useCampaignsStore()
 
 onMounted(() => {
@@ -38,7 +48,8 @@ const targetCampaignForAporte = ref<Campaign | null>(null)
 
 // State for WhatsApp Cobrança Modal
 const showWhatsappModal = ref(false)
-const targetCampaignForWhatsapp = ref<Campaign | null>(null)
+const whatsappOrganizerName = ref('')
+const whatsappEvents = ref<WhatsappEventMetrics[]>([])
 const copiedWhatsappMsg = ref(false)
 
 // Form Fields for New Campaign
@@ -115,44 +126,87 @@ const renewalAlertCampaigns = computed(() => {
   })
 })
 
-// Generated WhatsApp Message
-const whatsappMessage = computed(() => {
-  if (!targetCampaignForWhatsapp.value) return ''
-  const c = targetCampaignForWhatsapp.value
-  const stats = getCardAporteStats(c as any)
-  const remaining = stats.daysRemaining ?? 0
-  const daysText =
-    stats.status === 'expired'
-      ? 'encetou/encerrou'
-      : remaining <= 0
-        ? 'encerra hoje'
-        : `encerra em ${remaining} dia(s)`
+function calculateEventRoas(ev: WhatsappEventMetrics) {
+  const rev = Number(ev.revenueAmount) || 0
+  const spent = Number(ev.spentAmount) || 0
+  if (rev > 0 && spent > 0) {
+    ev.roas = Number((rev / spent).toFixed(2))
+  }
+}
 
-  const startDateStr = stats.activeAporte?.startDate ? formatDateBr(stats.activeAporte.startDate) : ''
-  const endDateStr = stats.activeAporte?.endDate ? formatDateBr(stats.activeAporte.endDate) : ''
-  const periodText = startDateStr && endDateStr ? `${startDateStr} a ${endDateStr}` : 'em andamento'
+function openWhatsappModalForOrganizer(orgName: string, singleCampaign?: Campaign) {
+  whatsappOrganizerName.value = orgName
+  
+  let campaignsToInclude: Campaign[] = []
+  if (singleCampaign) {
+    campaignsToInclude = [singleCampaign]
+  } else {
+    campaignsToInclude = campaignsStore.campaigns.filter(
+      (c) => (c.organizer || '').trim().toLowerCase() === orgName.trim().toLowerCase(),
+    )
+  }
 
-  return `Olá ${c.organizer}! Tudo bem?
+  whatsappEvents.value = campaignsToInclude.map((c) => {
+    const stats = getCardAporteStats(c as any)
+    const endDate = stats.activeAporte?.endDate || stats.latestAporte?.endDate || ''
+    let endStr = ''
+    if (endDate) {
+      const [, m, d] = endDate.split('-').map(Number)
+      if (d && m) endStr = `Acaba dia ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`
+    } else {
+      endStr = 'Em veiculação'
+    }
 
-Passando para avisar que a veiculação da campanha do evento *${c.eventName}* no Meta Ads ${daysText}.
+    const spent = stats.totalSpent > 0 ? stats.totalSpent : stats.totalGross
 
-📊 *Resumo Atual do Investimento:*
-• Saldo Líquido Disponível: ${formatCurrency(stats.totalAvailableNet)}
-• Período de Veiculação: ${periodText}
+    return {
+      campaignId: c.id,
+      eventName: (c.eventName || 'EVENTO').toUpperCase(),
+      endDateText: endStr,
+      salesCount: '',
+      spentAmount: spent || '',
+      revenueAmount: '',
+      roas: '',
+    }
+  })
 
-Para garantirmos a continuidade dos anúncios e vendas sem interrupções, podemos alinhar o próximo aporte? 🚀`
-})
-
-function openWhatsappModal(campaign: Campaign) {
-  targetCampaignForWhatsapp.value = campaign
   copiedWhatsappMsg.value = false
   showWhatsappModal.value = true
 }
 
+const generatedWhatsappReport = computed(() => {
+  if (!whatsappOrganizerName.value || !whatsappEvents.value.length) return ''
+
+  const lines: string[] = []
+  lines.push(`DADOS DE TRÁFEGO ${whatsappOrganizerName.value.toUpperCase()}\n`)
+
+  whatsappEvents.value.forEach((ev, idx) => {
+    if (idx > 0) lines.push('')
+    lines.push(`(${ev.endDateText})`)
+    lines.push(`${ev.eventName.toUpperCase()}`)
+    lines.push(`Vendas: ${ev.salesCount || 0} inscrições`)
+    
+    const spentVal = Number(ev.spentAmount) || 0
+    lines.push(`Valor investido: ${formatCurrency(spentVal)}`)
+
+    const revVal = Number(ev.revenueAmount) || 0
+    lines.push(`Receita: ${formatCurrency(revVal)}`)
+
+    let roasVal = ev.roas
+    if ((!roasVal || Number(roasVal) === 0) && revVal > 0 && spentVal > 0) {
+      roasVal = (revVal / spentVal).toFixed(2)
+    }
+    const roasStr = roasVal ? String(roasVal).replace('.', ',') : '0,00'
+    lines.push(`ROAS: ${roasStr}`)
+  })
+
+  return lines.join('\n')
+})
+
 async function copyWhatsappMessage() {
-  if (!whatsappMessage.value) return
+  if (!generatedWhatsappReport.value) return
   try {
-    await navigator.clipboard.writeText(whatsappMessage.value)
+    await navigator.clipboard.writeText(generatedWhatsappReport.value)
     copiedWhatsappMsg.value = true
     setTimeout(() => {
       copiedWhatsappMsg.value = false
@@ -425,7 +479,7 @@ function deleteCampaign(campaignId: string, title: string) {
             </h1>
           </div>
           <p class="mt-1 text-xs text-text-muted">
-            Gestão financeira de aportes, cálculo de impostos do Meta Ads (12,15%) e alertas de renovação.
+            Gestão financeira de aportes, cálculo de impostos do Meta Ads (12,15%) e relatórios de cobrança.
           </p>
         </div>
 
@@ -494,7 +548,7 @@ function deleteCampaign(campaignId: string, title: string) {
             <button
               type="button"
               class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-500/20 px-2.5 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/30"
-              @click="openWhatsappModal(camp)"
+              @click="openWhatsappModalForOrganizer(camp.organizer)"
             >
               <MessageCircle :size="14" />
               Cobrar
@@ -678,6 +732,17 @@ function deleteCampaign(campaignId: string, title: string) {
             </div>
 
             <div class="flex items-center gap-4">
+              <!-- Botão de Cobrança Agrupada do Organizador -->
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/30"
+                title="Gerar Relatório Agrupado de Tráfego para WhatsApp"
+                @click.stop="openWhatsappModalForOrganizer(group.organizer)"
+              >
+                <MessageCircle :size="14" />
+                Cobrar ({{ group.cards.length }} evento(s))
+              </button>
+
               <div class="text-right">
                 <span class="text-[10px] uppercase font-bold tracking-wider text-text-muted block">Saldo Líquido Disponível</span>
                 <span class="text-sm font-extrabold text-emerald-400">
@@ -687,6 +752,7 @@ function deleteCampaign(campaignId: string, title: string) {
                   (Líquido Total: {{ formatCurrency(group.totalNet) }})
                 </span>
               </div>
+
               <button
                 type="button"
                 class="rounded-lg p-1 text-text-muted hover:text-text-primary"
@@ -752,16 +818,15 @@ function deleteCampaign(campaignId: string, title: string) {
                     Nenhum aporte
                   </span>
 
-                  <!-- Botão de Cobrar no WhatsApp se estiver vencendo ou encerrada -->
+                  <!-- Botão de Cobrar Este Evento Individual -->
                   <button
-                    v-if="getCardAporteStats(card as any).status === 'ending_soon' || getCardAporteStats(card as any).status === 'expired'"
                     type="button"
                     class="inline-flex items-center gap-1 rounded-lg bg-emerald-500/20 px-2.5 py-1 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/30"
-                    title="Gerar mensagem formatada para WhatsApp"
-                    @click="openWhatsappModal(card)"
+                    title="Gerar Relatório de Tráfego deste evento para WhatsApp"
+                    @click="openWhatsappModalForOrganizer(card.organizer, card)"
                   >
                     <MessageCircle :size="13" />
-                    Cobrar
+                    Cobrar Este
                   </button>
 
                   <!-- Botão de Novo Aporte no Evento -->
@@ -1164,26 +1229,26 @@ function deleteCampaign(campaignId: string, title: string) {
     </div>
   </Teleport>
 
-  <!-- MODAL: COBRAR APORTE NO WHATSAPP -->
+  <!-- MODAL DE RELATÓRIO DE TRÁFEGO DADOS PARA WHATSAPP -->
   <Teleport to="body">
     <div
-      v-if="showWhatsappModal && targetCampaignForWhatsapp"
+      v-if="showWhatsappModal && whatsappEvents.length"
       class="fixed inset-0 z-50 flex items-center justify-center p-4"
     >
       <div
         class="absolute inset-0 bg-black/70 backdrop-blur-sm"
         @click="showWhatsappModal = false"
       />
-      <div class="relative z-10 w-full max-w-lg rounded-2xl border border-emerald-500/30 bg-board-elevated p-6 shadow-2xl space-y-4">
-        <div class="flex items-center justify-between border-b border-white/10 pb-3">
+      <div class="relative z-10 w-full max-w-3xl max-h-[90vh] flex flex-col rounded-2xl border border-emerald-500/30 bg-board-elevated p-6 shadow-2xl overflow-hidden">
+        <div class="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
           <div class="flex items-center gap-2">
             <div class="flex size-8 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300">
               <MessageCircle :size="18" />
             </div>
             <div>
-              <h3 class="text-base font-bold text-text-primary">Cobrar Aporte via WhatsApp</h3>
+              <h3 class="text-base font-bold text-text-primary">Gerador de Dados de Tráfego (WhatsApp)</h3>
               <p class="text-xs text-text-muted">
-                {{ targetCampaignForWhatsapp.eventName }} ({{ targetCampaignForWhatsapp.organizer }})
+                Organizador: <strong class="text-text-primary">{{ whatsappOrganizerName }}</strong> ({{ whatsappEvents.length }} evento(s))
               </p>
             </div>
           </div>
@@ -1196,42 +1261,116 @@ function deleteCampaign(campaignId: string, title: string) {
           </button>
         </div>
 
-        <div class="space-y-2">
-          <label class="text-xs font-bold text-text-muted block">
-            Mensagem Personalizada Pronta para Envio:
-          </label>
-          <textarea
-            :value="whatsappMessage"
-            readonly
-            rows="9"
-            class="w-full rounded-xl border border-white/10 bg-surface/80 p-3 text-xs text-text-primary outline-none resize-none font-sans leading-relaxed"
-          />
+        <div class="min-h-0 flex-1 overflow-y-auto py-4 pr-1 grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <!-- LADO ESQUERDO: CAMPOS DE MÉTRICAS EDITÁVEIS PARA CADA EVENTO -->
+          <div class="space-y-4">
+            <p class="text-xs font-bold text-text-muted uppercase tracking-wider">
+              Preencha os dados de desempenho por evento:
+            </p>
+
+            <div
+              v-for="ev in whatsappEvents"
+              :key="ev.campaignId"
+              class="rounded-xl border border-white/10 bg-surface/70 p-3.5 space-y-2.5 text-xs"
+            >
+              <div class="flex items-center justify-between border-b border-white/10 pb-2">
+                <span class="font-extrabold text-amber-300 truncate max-w-[200px]" :title="ev.eventName">
+                  🏆 {{ ev.eventName }}
+                </span>
+                <input
+                  v-model="ev.endDateText"
+                  type="text"
+                  placeholder="Ex: Acaba dia 29/07"
+                  class="rounded-lg border border-border-subtle bg-column px-2 py-1 text-[11px] text-text-primary outline-none focus:border-accent w-28 text-right font-semibold"
+                />
+              </div>
+
+              <div class="grid grid-cols-2 gap-2">
+                <label class="block">
+                  <span class="text-[10px] text-text-muted block">Vendas (Inscrições)</span>
+                  <input
+                    v-model.number="ev.salesCount"
+                    type="number"
+                    placeholder="Ex: 32"
+                    class="mt-0.5 w-full rounded-lg border border-border-subtle bg-column px-2 py-1 text-xs text-text-primary outline-none focus:border-accent"
+                  />
+                </label>
+
+                <label class="block">
+                  <span class="text-[10px] text-text-muted block">Valor Investido (R$)</span>
+                  <input
+                    v-model.number="ev.spentAmount"
+                    type="number"
+                    step="0.01"
+                    placeholder="Ex: 716.33"
+                    class="mt-0.5 w-full rounded-lg border border-border-subtle bg-column px-2 py-1 text-xs text-text-primary outline-none focus:border-accent"
+                    @input="calculateEventRoas(ev)"
+                  />
+                </label>
+
+                <label class="block">
+                  <span class="text-[10px] text-text-muted block">Receita Faturada (R$)</span>
+                  <input
+                    v-model.number="ev.revenueAmount"
+                    type="number"
+                    step="0.01"
+                    placeholder="Ex: 1799.68"
+                    class="mt-0.5 w-full rounded-lg border border-border-subtle bg-column px-2 py-1 text-xs text-text-primary outline-none focus:border-accent"
+                    @input="calculateEventRoas(ev)"
+                  />
+                </label>
+
+                <label class="block">
+                  <span class="text-[10px] text-text-muted block">ROAS (Calculado)</span>
+                  <input
+                    v-model.number="ev.roas"
+                    type="number"
+                    step="0.01"
+                    placeholder="Ex: 2.51"
+                    class="mt-0.5 w-full rounded-lg border border-border-subtle bg-column px-2 py-1 text-xs font-bold text-emerald-400 outline-none focus:border-accent"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- LADO DIREITO: PRÉVIA EM TEMPO REAL DO RELATÓRIO DO WHATSAPP -->
+          <div class="flex flex-col space-y-2">
+            <span class="text-xs font-bold text-text-muted uppercase tracking-wider block">
+              Prévia Formatada da Mensagem (WhatsApp):
+            </span>
+            <textarea
+              :value="generatedWhatsappReport"
+              readonly
+              class="flex-1 w-full rounded-xl border border-white/10 bg-column p-3.5 text-xs text-text-primary outline-none resize-none font-mono leading-relaxed min-h-[260px]"
+            />
+          </div>
         </div>
 
-        <div class="flex items-center justify-between gap-2 pt-1">
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-white/10 shrink-0">
           <span v-if="copiedWhatsappMsg" class="inline-flex items-center gap-1 text-xs font-bold text-emerald-400">
             <Check :size="14" />
-            Mensagem copiada para a área de transferência!
+            Relatório copiado com sucesso! Prático para colar no WhatsApp.
           </span>
           <span v-else class="text-[11px] text-text-muted">
-            Clique no botão ao lado para copiar e colar no WhatsApp.
+            Formatado exatamente conforme seu padrão de tráfego.
           </span>
 
           <div class="flex items-center gap-2">
             <button
               type="button"
-              class="rounded-xl px-3 py-2 text-xs text-text-muted hover:bg-white/5"
+              class="rounded-xl px-4 py-2 text-xs text-text-muted hover:bg-white/5"
               @click="showWhatsappModal = false"
             >
               Fechar
             </button>
             <button
               type="button"
-              class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500 px-4 py-2 text-xs font-bold text-board hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20"
+              class="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2 text-xs font-bold text-board hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20"
               @click="copyWhatsappMessage"
             >
               <Copy :size="14" />
-              Copiar Mensagem
+              Copiar Relatório para WhatsApp
             </button>
           </div>
         </div>
