@@ -69,8 +69,15 @@ export function buildRunffDescription(
   return `${clean}${RUNFF_META_PREFIX}${jsonStr}${RUNFF_META_SUFFIX}`
 }
 
+export const META_TAX_RATE = 0.1215 // 12.15% Meta Ads Tax
+
 export interface CardAporteStats {
-  totalAmount: number
+  totalAmount: number // totalGross
+  totalGross: number
+  totalTax: number
+  totalNet: number
+  totalSpent: number
+  totalAvailableNet: number
   latestAporte: Aporte | null
   activeAporte: Aporte | null
   status: 'active' | 'ending_soon' | 'expired' | 'upcoming' | 'none'
@@ -83,16 +90,28 @@ export function getCardAporteStats(
   if (!card || !card.aportes || card.aportes.length === 0) {
     return {
       totalAmount: 0,
+      totalGross: 0,
+      totalTax: 0,
+      totalNet: 0,
+      totalSpent: 0,
+      totalAvailableNet: 0,
       latestAporte: null,
       activeAporte: null,
       status: 'none',
     }
   }
 
-  const totalAmount = card.aportes.reduce(
+  const totalGross = card.aportes.reduce(
     (acc, ap) => acc + (Number(ap.amount) || 0),
     0,
   )
+  const totalTax = totalGross * META_TAX_RATE
+  const totalNet = totalGross * (1 - META_TAX_RATE)
+  const totalSpent = card.aportes.reduce(
+    (acc, ap) => acc + (Number(ap.spentAmount) || 0),
+    0,
+  )
+  const totalAvailableNet = Math.max(0, totalNet - totalSpent)
 
   const sorted = [...card.aportes].sort((a, b) =>
     (b.startDate || b.date).localeCompare(a.startDate || a.date),
@@ -112,7 +131,12 @@ export function getCardAporteStats(
 
   if (!targetAporte) {
     return {
-      totalAmount,
+      totalAmount: totalGross,
+      totalGross,
+      totalTax,
+      totalNet,
+      totalSpent,
+      totalAvailableNet,
       latestAporte: null,
       activeAporte: null,
       status: 'none',
@@ -124,7 +148,12 @@ export function getCardAporteStats(
 
   if (endDate < todayStr) {
     return {
-      totalAmount,
+      totalAmount: totalGross,
+      totalGross,
+      totalTax,
+      totalNet,
+      totalSpent,
+      totalAvailableNet,
       latestAporte,
       activeAporte: null,
       status: 'expired',
@@ -133,7 +162,12 @@ export function getCardAporteStats(
 
   if (startDate > todayStr) {
     return {
-      totalAmount,
+      totalAmount: totalGross,
+      totalGross,
+      totalTax,
+      totalNet,
+      totalSpent,
+      totalAvailableNet,
       latestAporte,
       activeAporte: null,
       status: 'upcoming',
@@ -148,7 +182,12 @@ export function getCardAporteStats(
   const status = daysRemaining <= 2 ? 'ending_soon' : 'active'
 
   return {
-    totalAmount,
+    totalAmount: totalGross,
+    totalGross,
+    totalTax,
+    totalNet,
+    totalSpent,
+    totalAvailableNet,
     latestAporte,
     activeAporte: targetAporte,
     status,

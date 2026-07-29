@@ -10,7 +10,7 @@ import {
   Trophy,
   X,
 } from '@lucide/vue'
-import { getCardAporteStats, useBoardStore } from '../stores/board'
+import { getCardAporteStats, META_TAX_RATE, useBoardStore } from '../stores/board'
 import type { Aporte, Card } from '../types/board'
 
 const board = useBoardStore()
@@ -30,16 +30,64 @@ const targetCardForAporte = ref<Card | null>(null)
 const newOrganizerName = ref('')
 const newEventName = ref('')
 const initialAporteAmount = ref<number | ''>('')
+const initialSpentAmount = ref<number | ''>('')
+const initialDurationDays = ref<number | ''>(7)
 const initialStartDate = ref(new Date().toISOString().slice(0, 10))
 const initialEndDate = ref('')
 const initialNotes = ref('')
 
 // Form Fields for New Aporte Modal
 const aporteAmount = ref<number | ''>('')
+const aporteSpentAmount = ref<number | ''>('')
+const aporteDurationDays = ref<number | ''>(7)
 const aporteDate = ref(new Date().toISOString().slice(0, 10))
 const aporteStartDate = ref(new Date().toISOString().slice(0, 10))
 const aporteEndDate = ref('')
 const aporteNotes = ref('')
+
+// Live calculations for New Aporte Modal
+const aporteGross = computed(() => Number(aporteAmount.value) || 0)
+const aporteTax = computed(() => aporteGross.value * META_TAX_RATE)
+const aporteNet = computed(() => aporteGross.value * (1 - META_TAX_RATE))
+const aporteSpent = computed(() => Number(aporteSpentAmount.value) || 0)
+const aporteAvailableNet = computed(() => Math.max(0, aporteNet.value - aporteSpent.value))
+
+// Live calculations for Initial Campaign Modal
+const initialGross = computed(() => Number(initialAporteAmount.value) || 0)
+const initialTax = computed(() => initialGross.value * META_TAX_RATE)
+const initialNet = computed(() => initialGross.value * (1 - META_TAX_RATE))
+const initialSpent = computed(() => Number(initialSpentAmount.value) || 0)
+const initialAvailable = computed(() => Math.max(0, initialNet.value - initialSpent.value))
+
+function onAporteDaysChange() {
+  const days = Number(aporteDurationDays.value)
+  const sDate = aporteStartDate.value || new Date().toISOString().slice(0, 10)
+  if (days && days > 0) {
+    const d = new Date(sDate)
+    d.setDate(d.getDate() + days)
+    aporteEndDate.value = d.toISOString().slice(0, 10)
+  }
+}
+
+function onAporteEndDateChange() {
+  const sDate = aporteStartDate.value
+  const eDate = aporteEndDate.value
+  if (sDate && eDate) {
+    const diff = new Date(eDate).getTime() - new Date(sDate).getTime()
+    const days = Math.round(diff / (1000 * 60 * 60 * 24))
+    if (days > 0) aporteDurationDays.value = days
+  }
+}
+
+function onInitialDaysChange() {
+  const days = Number(initialDurationDays.value)
+  const sDate = initialStartDate.value || new Date().toISOString().slice(0, 10)
+  if (days && days > 0) {
+    const d = new Date(sDate)
+    d.setDate(d.getDate() + days)
+    initialEndDate.value = d.toISOString().slice(0, 10)
+  }
+}
 
 // All cards that are considered campaigns (have organizer, eventName, or aportes)
 const campaignCards = computed(() => {
@@ -97,7 +145,10 @@ const groupedByOrganizer = computed(() => {
     {
       organizer: string
       cards: Card[]
-      totalAmount: number
+      totalGross: number
+      totalNet: number
+      totalSpent: number
+      totalAvailableNet: number
       activeCount: number
     }
   > = {}
@@ -108,13 +159,19 @@ const groupedByOrganizer = computed(() => {
       groups[orgKey] = {
         organizer: orgKey,
         cards: [],
-        totalAmount: 0,
+        totalGross: 0,
+        totalNet: 0,
+        totalSpent: 0,
+        totalAvailableNet: 0,
         activeCount: 0,
       }
     }
     const stats = getCardAporteStats(card)
     groups[orgKey].cards.push(card)
-    groups[orgKey].totalAmount += stats.totalAmount
+    groups[orgKey].totalGross += stats.totalGross
+    groups[orgKey].totalNet += stats.totalNet
+    groups[orgKey].totalSpent += stats.totalSpent
+    groups[orgKey].totalAvailableNet += stats.totalAvailableNet
     if (stats.status === 'active' || stats.status === 'ending_soon') {
       groups[orgKey].activeCount += 1
     }
@@ -127,7 +184,11 @@ const groupedByOrganizer = computed(() => {
 
 // Overall Statistics
 const overallStats = computed(() => {
-  let totalAmount = 0
+  let totalGross = 0
+  let totalTax = 0
+  let totalNet = 0
+  let totalSpent = 0
+  let totalAvailableNet = 0
   let activeCount = 0
   let endingSoonCount = 0
   const organizersSet = new Set<string>()
@@ -135,13 +196,21 @@ const overallStats = computed(() => {
   campaignCards.value.forEach((card) => {
     if (card.organizer?.trim()) organizersSet.add(card.organizer.trim())
     const stats = getCardAporteStats(card)
-    totalAmount += stats.totalAmount
+    totalGross += stats.totalGross
+    totalTax += stats.totalTax
+    totalNet += stats.totalNet
+    totalSpent += stats.totalSpent
+    totalAvailableNet += stats.totalAvailableNet
     if (stats.status === 'active') activeCount += 1
     if (stats.status === 'ending_soon') endingSoonCount += 1
   })
 
   return {
-    totalAmount,
+    totalGross,
+    totalTax,
+    totalNet,
+    totalSpent,
+    totalAvailableNet,
     activeCount,
     endingSoonCount,
     totalOrganizers: organizersSet.size,
@@ -174,14 +243,12 @@ function formatDateBr(dateStr: string) {
 function openAporteModalForCard(card: Card) {
   targetCardForAporte.value = card
   aporteAmount.value = ''
+  aporteSpentAmount.value = ''
+  aporteDurationDays.value = 7
   aporteNotes.value = ''
   aporteDate.value = new Date().toISOString().slice(0, 10)
   aporteStartDate.value = new Date().toISOString().slice(0, 10)
-
-  // Default end date 7 days from now
-  const endD = new Date()
-  endD.setDate(endD.getDate() + 7)
-  aporteEndDate.value = endD.toISOString().slice(0, 10)
+  onAporteDaysChange()
 
   showNewAporteModal.value = true
 }
@@ -205,12 +272,15 @@ async function submitCreateCampaign() {
         initialStartDate.value || new Date().toISOString().slice(0, 10)
       let eDate = initialEndDate.value
       if (!eDate) {
+        const days = Number(initialDurationDays.value) || 7
         const d = new Date(sDate)
-        d.setDate(d.getDate() + 7)
+        d.setDate(d.getDate() + days)
         eDate = d.toISOString().slice(0, 10)
       }
       aportes.push({
         amount: amountNum,
+        spentAmount: Number(initialSpentAmount.value) || 0,
+        durationDays: Number(initialDurationDays.value) || undefined,
         date: sDate,
         startDate: sDate,
         endDate: eDate,
@@ -233,6 +303,8 @@ async function submitCreateCampaign() {
   newOrganizerName.value = ''
   newEventName.value = ''
   initialAporteAmount.value = ''
+  initialSpentAmount.value = ''
+  initialDurationDays.value = 7
   initialNotes.value = ''
   showNewCampaignModal.value = false
 }
@@ -248,13 +320,16 @@ async function submitAddAporte() {
     new Date().toISOString().slice(0, 10)
   let eDate = aporteEndDate.value
   if (!eDate) {
+    const days = Number(aporteDurationDays.value) || 7
     const d = new Date(sDate)
-    d.setDate(d.getDate() + 7)
+    d.setDate(d.getDate() + days)
     eDate = d.toISOString().slice(0, 10)
   }
 
   await board.addAporte(targetCardForAporte.value.id, {
     amount: amountNum,
+    spentAmount: Number(aporteSpentAmount.value) || 0,
+    durationDays: Number(aporteDurationDays.value) || undefined,
     date: aporteDate.value || sDate,
     startDate: sDate,
     endDate: eDate,
@@ -294,7 +369,7 @@ async function deleteCampaign(cardId: string, title: string) {
             </h1>
           </div>
           <p class="mt-1 text-xs text-text-muted">
-            Gestão de organizadores, eventos esportivos e prazos de veiculação de tráfego pago (Meta Ads).
+            Gestão financeira de aportes com dedução do imposto do Meta Ads (12,15%), saldo disponível e controle de dias.
           </p>
         </div>
 
@@ -302,7 +377,7 @@ async function deleteCampaign(cardId: string, title: string) {
           <button
             type="button"
             class="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-xs font-bold text-board shadow-lg shadow-accent/20 transition-transform hover:scale-[1.02] active:scale-95"
-            @click="showNewCampaignModal = true"
+            @click="showNewCampaignModal = true; onInitialDaysChange()"
           >
             <Plus :size="16" :stroke-width="2.5" />
             Nova Campanha / Evento
@@ -310,33 +385,51 @@ async function deleteCampaign(cardId: string, title: string) {
         </div>
       </header>
 
-      <!-- Cards de Métricas Principais -->
+      <!-- Cards de Métricas Principais (Financeiras e Veiculação) -->
       <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div class="rounded-2xl border border-white/10 bg-board-elevated/70 p-4 shadow-sm">
-          <p class="text-[10px] font-bold uppercase tracking-wider text-text-muted">Total Investido (Aportes)</p>
+        <!-- Saldo Líquido Disponível -->
+        <div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 shadow-sm">
+          <p class="text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+            🟢 Saldo Líquido Disponível
+          </p>
           <p class="mt-1 text-xl font-black text-emerald-400">
-            {{ formatCurrency(overallStats.totalAmount) }}
+            {{ formatCurrency(overallStats.totalAvailableNet) }}
+          </p>
+          <p class="text-[10px] text-text-muted mt-0.5">
+            Valor líquido pronto para veicular
           </p>
         </div>
 
+        <!-- Total Líquido para Anúncios (Pós Imposto 12,15%) -->
         <div class="rounded-2xl border border-white/10 bg-board-elevated/70 p-4 shadow-sm">
-          <p class="text-[10px] font-bold uppercase tracking-wider text-text-muted">Campanhas Ativas</p>
-          <p class="mt-1 text-xl font-black text-emerald-300">
-            🟢 {{ overallStats.activeCount }}
+          <p class="text-[10px] font-bold uppercase tracking-wider text-text-muted">Valor Líquido Total</p>
+          <p class="mt-1 text-xl font-black text-sky-400">
+            {{ formatCurrency(overallStats.totalNet) }}
+          </p>
+          <p class="text-[10px] text-text-muted mt-0.5">
+            Bruto: {{ formatCurrency(overallStats.totalGross) }} (-12,15% tax)
           </p>
         </div>
 
+        <!-- Total Já Investido / Gasto -->
         <div class="rounded-2xl border border-white/10 bg-board-elevated/70 p-4 shadow-sm">
-          <p class="text-[10px] font-bold uppercase tracking-wider text-text-muted">Vencendo em 2 Dias</p>
+          <p class="text-[10px] font-bold uppercase tracking-wider text-text-muted">Já Investido / Gasto</p>
           <p class="mt-1 text-xl font-black text-amber-300">
-            🟡 {{ overallStats.endingSoonCount }}
+            {{ formatCurrency(overallStats.totalSpent) }}
+          </p>
+          <p class="text-[10px] text-text-muted mt-0.5">
+            Total utilizado nas campanhas
           </p>
         </div>
 
+        <!-- Campanhas Ativas e Vencendo -->
         <div class="rounded-2xl border border-white/10 bg-board-elevated/70 p-4 shadow-sm">
-          <p class="text-[10px] font-bold uppercase tracking-wider text-text-muted">Organizadores Cadastrados</p>
-          <p class="mt-1 text-xl font-black text-accent">
-            👤 {{ overallStats.totalOrganizers }}
+          <p class="text-[10px] font-bold uppercase tracking-wider text-text-muted">Veiculação Ativa</p>
+          <p class="mt-1 text-xl font-black text-text-primary">
+            🟢 {{ overallStats.activeCount }} <span class="text-xs font-semibold text-amber-300">({{ overallStats.endingSoonCount }} vencendo)</span>
+          </p>
+          <p class="text-[10px] text-text-muted mt-0.5">
+            {{ overallStats.totalOrganizers }} organizador(es)
           </p>
         </div>
       </div>
@@ -420,7 +513,7 @@ async function deleteCampaign(cardId: string, title: string) {
         <button
           type="button"
           class="mt-4 inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-xs font-bold text-board hover:bg-accent-hover"
-          @click="showNewCampaignModal = true"
+          @click="showNewCampaignModal = true; onInitialDaysChange()"
         >
           <Plus :size="14" />
           Cadastrar Primeira Campanha
@@ -455,9 +548,12 @@ async function deleteCampaign(cardId: string, title: string) {
 
             <div class="flex items-center gap-4">
               <div class="text-right">
-                <span class="text-[10px] uppercase font-bold tracking-wider text-text-muted block">Total Aportado</span>
+                <span class="text-[10px] uppercase font-bold tracking-wider text-text-muted block">Saldo Líquido Disponível</span>
                 <span class="text-sm font-extrabold text-emerald-400">
-                  {{ formatCurrency(group.totalAmount) }}
+                  {{ formatCurrency(group.totalAvailableNet) }}
+                </span>
+                <span class="text-[10px] text-text-muted block">
+                  (Líquido Total: {{ formatCurrency(group.totalNet) }})
                 </span>
               </div>
               <button
@@ -539,32 +635,35 @@ async function deleteCampaign(cardId: string, title: string) {
                 </div>
               </div>
 
-              <!-- Resumo das Estatísticas do Evento -->
-              <div class="grid grid-cols-2 gap-3 rounded-lg border border-white/5 bg-surface/50 p-2.5 text-xs sm:grid-cols-3">
+              <!-- Resumo das Estatísticas Financeiras do Evento -->
+              <div class="grid grid-cols-2 gap-3 rounded-lg border border-white/5 bg-surface/50 p-3 text-xs sm:grid-cols-4">
                 <div>
-                  <span class="text-[10px] text-text-muted block font-semibold uppercase">Total Aportado</span>
+                  <span class="text-[10px] text-text-muted block font-semibold uppercase">Bruto Aportado</span>
+                  <span class="font-bold text-text-primary text-xs">
+                    {{ formatCurrency(getCardAporteStats(card).totalGross) }}
+                  </span>
+                  <span class="text-[9px] text-text-muted block">Meta: -12,15%</span>
+                </div>
+
+                <div>
+                  <span class="text-[10px] text-text-muted block font-semibold uppercase">Líquido Anúncios</span>
+                  <span class="font-bold text-sky-400 text-xs">
+                    {{ formatCurrency(getCardAporteStats(card).totalNet) }}
+                  </span>
+                  <span class="text-[9px] text-text-muted block">Taxa: {{ formatCurrency(getCardAporteStats(card).totalTax) }}</span>
+                </div>
+
+                <div>
+                  <span class="text-[10px] text-text-muted block font-semibold uppercase">Já Investido / Gasto</span>
+                  <span class="font-bold text-amber-300 text-xs">
+                    {{ formatCurrency(getCardAporteStats(card).totalSpent) }}
+                  </span>
+                </div>
+
+                <div class="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2">
+                  <span class="text-[10px] text-emerald-300 block font-bold uppercase">Saldo Disponível</span>
                   <span class="font-extrabold text-emerald-400 text-sm">
-                    {{ formatCurrency(getCardAporteStats(card).totalAmount) }}
-                  </span>
-                </div>
-
-                <div>
-                  <span class="text-[10px] text-text-muted block font-semibold uppercase">Última Veiculação</span>
-                  <span class="font-semibold text-text-primary">
-                    <template v-if="getCardAporteStats(card).activeAporte">
-                      {{ formatDateBr(getCardAporteStats(card).activeAporte!.startDate) }} até {{ formatDateBr(getCardAporteStats(card).activeAporte!.endDate) }}
-                    </template>
-                    <template v-else-if="getCardAporteStats(card).latestAporte">
-                      {{ formatDateBr(getCardAporteStats(card).latestAporte!.startDate) }} até {{ formatDateBr(getCardAporteStats(card).latestAporte!.endDate) }}
-                    </template>
-                    <template v-else>-</template>
-                  </span>
-                </div>
-
-                <div class="col-span-2 sm:col-span-1">
-                  <span class="text-[10px] text-text-muted block font-semibold uppercase">Quantidade de Aportes</span>
-                  <span class="font-semibold text-text-primary">
-                    {{ card.aportes?.length || 0 }} registro(s)
+                    {{ formatCurrency(getCardAporteStats(card).totalAvailableNet) }}
                   </span>
                 </div>
               </div>
@@ -572,20 +671,30 @@ async function deleteCampaign(cardId: string, title: string) {
               <!-- Histórico de Aportes do Evento -->
               <div v-if="card.aportes?.length" class="space-y-1.5 pt-1">
                 <p class="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                  Histórico Detalhado dos Aportes:
+                  Histórico Detalhado dos Aportes ({{ card.aportes.length }}):
                 </p>
-                <div class="space-y-1 max-h-36 overflow-y-auto pr-1">
+                <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                   <div
                     v-for="ap in card.aportes"
                     :key="ap.id"
-                    class="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-board-elevated/70 px-3 py-1.5 text-xs"
+                    class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-board-elevated/70 px-3 py-2 text-xs"
                   >
-                    <div class="flex items-center gap-2">
-                      <span class="font-bold text-emerald-400">
-                        {{ formatCurrency(ap.amount) }}
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span class="font-bold text-text-primary" title="Valor Bruto">
+                        Bruto: {{ formatCurrency(ap.amount) }}
+                      </span>
+                      <span class="font-bold text-sky-400" title="Valor Líquido pós 12.15% imposto">
+                        Líquido (-12,15%): {{ formatCurrency(ap.amount * (1 - META_TAX_RATE)) }}
+                      </span>
+                      <span v-if="ap.spentAmount" class="font-semibold text-amber-300">
+                        Gasto: {{ formatCurrency(ap.spentAmount) }}
+                      </span>
+                      <span class="font-extrabold text-emerald-400">
+                        Disponível: {{ formatCurrency(Math.max(0, ap.amount * (1 - META_TAX_RATE) - (ap.spentAmount || 0))) }}
                       </span>
                       <span class="text-text-secondary">
-                        📅 Veiculação: {{ formatDateBr(ap.startDate) }} a {{ formatDateBr(ap.endDate) }}
+                        📅 {{ formatDateBr(ap.startDate) }} até {{ formatDateBr(ap.endDate) }}
+                        <template v-if="ap.durationDays">({{ ap.durationDays }} dias)</template>
                       </span>
                       <span v-if="ap.notes" class="text-[10px] text-text-muted italic">
                         ({{ ap.notes }})
@@ -593,11 +702,11 @@ async function deleteCampaign(cardId: string, title: string) {
                     </div>
                     <button
                       type="button"
-                      class="text-text-muted hover:text-danger"
+                      class="text-text-muted hover:text-danger p-1"
                       title="Apagar aporte"
                       @click="deleteAporte(card.id, ap.id)"
                     >
-                      <Trash2 :size="12" />
+                      <Trash2 :size="13" />
                     </button>
                   </div>
                 </div>
@@ -661,37 +770,80 @@ async function deleteCampaign(cardId: string, title: string) {
             />
           </label>
 
-          <div class="border-t border-white/10 pt-3">
-            <p class="font-bold text-text-muted mb-2">Primeiro Aporte de Investimento (Opcional):</p>
-            <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+          <div class="border-t border-white/10 pt-3 space-y-3">
+            <p class="font-bold text-text-muted">Primeiro Aporte de Investimento (Opcional):</p>
+
+            <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <label class="block">
-                <span class="text-[10px] text-text-muted block">Valor (R$)</span>
+                <span class="text-[10px] font-semibold text-text-muted block">Valor Bruto Aportado (R$)</span>
                 <input
                   v-model.number="initialAporteAmount"
                   type="number"
                   step="0.01"
-                  placeholder="Ex: 500,00"
-                  class="w-full rounded-lg border border-border-subtle bg-column px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
+                  placeholder="Ex: 1000,00"
+                  class="mt-0.5 w-full rounded-lg border border-border-subtle bg-column px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
                 />
               </label>
 
               <label class="block">
-                <span class="text-[10px] text-text-muted block">Início da Veiculação</span>
+                <span class="text-[10px] font-semibold text-text-muted block">Valor Já Investido / Gasto (R$)</span>
+                <input
+                  v-model.number="initialSpentAmount"
+                  type="number"
+                  step="0.01"
+                  placeholder="Ex: 300,00 (ou 0)"
+                  class="mt-0.5 w-full rounded-lg border border-border-subtle bg-column px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
+                />
+              </label>
+            </div>
+
+            <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+              <label class="block">
+                <span class="text-[10px] font-semibold text-text-muted block">Início da Veiculação</span>
                 <input
                   v-model="initialStartDate"
                   type="date"
-                  class="w-full rounded-lg border border-border-subtle bg-column px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
+                  class="mt-0.5 w-full rounded-lg border border-border-subtle bg-column px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
+                  @change="onInitialDaysChange"
                 />
               </label>
 
               <label class="block">
-                <span class="text-[10px] text-text-muted block">Término da Veiculação</span>
+                <span class="text-[10px] font-semibold text-text-muted block">Duração (Dias)</span>
+                <input
+                  v-model.number="initialDurationDays"
+                  type="number"
+                  min="1"
+                  placeholder="Ex: 7 ou 10"
+                  class="mt-0.5 w-full rounded-lg border border-border-subtle bg-column px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
+                  @input="onInitialDaysChange"
+                />
+              </label>
+
+              <label class="block">
+                <span class="text-[10px] font-semibold text-text-muted block">Término Calculado</span>
                 <input
                   v-model="initialEndDate"
                   type="date"
-                  class="w-full rounded-lg border border-border-subtle bg-column px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
+                  class="mt-0.5 w-full rounded-lg border border-border-subtle bg-column px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
                 />
               </label>
+            </div>
+
+            <!-- Prévia dos Cálculos Financeiros -->
+            <div v-if="initialGross > 0" class="rounded-xl border border-white/10 bg-surface/70 p-3 space-y-1 text-xs">
+              <div class="flex justify-between text-text-muted">
+                <span>Imposto Meta Ads (12,15%):</span>
+                <span class="text-danger font-semibold">- {{ formatCurrency(initialTax) }}</span>
+              </div>
+              <div class="flex justify-between text-text-muted">
+                <span>Valor Líquido Real Anúncios:</span>
+                <span class="text-sky-400 font-bold">{{ formatCurrency(initialNet) }}</span>
+              </div>
+              <div class="flex justify-between text-emerald-400 font-extrabold pt-1 border-t border-white/10">
+                <span>Saldo Disponível Líquido:</span>
+                <span>{{ formatCurrency(initialAvailable) }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -746,38 +898,90 @@ async function deleteCampaign(cardId: string, title: string) {
         </div>
 
         <div class="space-y-3 text-xs">
-          <label class="block">
-            <span class="font-bold text-text-muted block mb-1">Valor Aportado (R$) *</span>
-            <input
-              v-model.number="aporteAmount"
-              type="number"
-              step="0.01"
-              placeholder="Ex: 500,00"
-              class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
-              required
-            />
-          </label>
-
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             <label class="block">
-              <span class="font-bold text-text-muted block mb-1">Início da Veiculação *</span>
+              <span class="font-bold text-text-muted block mb-1">Valor Bruto Aportado (R$) *</span>
+              <input
+                v-model.number="aporteAmount"
+                type="number"
+                step="0.01"
+                placeholder="Ex: 1000,00"
+                class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
+                required
+              />
+            </label>
+
+            <label class="block">
+              <span class="font-bold text-text-muted block mb-1">Já Investido / Gasto (R$)</span>
+              <input
+                v-model.number="aporteSpentAmount"
+                type="number"
+                step="0.01"
+                placeholder="Ex: 300,00 (ou 0)"
+                class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
+              />
+            </label>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2">
+            <label class="block">
+              <span class="font-bold text-text-muted block mb-1">Início *</span>
               <input
                 v-model="aporteStartDate"
                 type="date"
-                class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
+                class="w-full rounded-xl border border-border-subtle bg-column px-2 py-2 text-xs text-text-primary outline-none focus:border-accent"
                 required
+                @change="onAporteDaysChange"
               />
             </label>
 
             <label class="block">
-              <span class="font-bold text-text-muted block mb-1">Término da Veiculação *</span>
+              <span class="font-bold text-text-muted block mb-1">Dias *</span>
+              <input
+                v-model.number="aporteDurationDays"
+                type="number"
+                min="1"
+                placeholder="Ex: 7"
+                class="w-full rounded-xl border border-border-subtle bg-column px-2 py-2 text-xs text-text-primary outline-none focus:border-accent"
+                required
+                @input="onAporteDaysChange"
+              />
+            </label>
+
+            <label class="block">
+              <span class="font-bold text-text-muted block mb-1">Término *</span>
               <input
                 v-model="aporteEndDate"
                 type="date"
-                class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
+                class="w-full rounded-xl border border-border-subtle bg-column px-2 py-2 text-xs text-text-primary outline-none focus:border-accent"
                 required
+                @change="onAporteEndDateChange"
               />
             </label>
+          </div>
+
+          <!-- Prévia dos Cálculos Financeiros do Aporte -->
+          <div v-if="aporteGross > 0" class="rounded-xl border border-white/10 bg-surface/80 p-3 space-y-1 text-xs">
+            <div class="flex justify-between text-text-muted">
+              <span>Valor Bruto Aportado:</span>
+              <span class="font-semibold text-text-primary">{{ formatCurrency(aporteGross) }}</span>
+            </div>
+            <div class="flex justify-between text-text-muted">
+              <span>Desconto Imposto Meta (12,15%):</span>
+              <span class="text-danger font-semibold">- {{ formatCurrency(aporteTax) }}</span>
+            </div>
+            <div class="flex justify-between text-text-muted">
+              <span>Valor Líquido Anúncios:</span>
+              <span class="text-sky-400 font-bold">{{ formatCurrency(aporteNet) }}</span>
+            </div>
+            <div v-if="aporteSpent > 0" class="flex justify-between text-text-muted">
+              <span>Já Investido / Gasto:</span>
+              <span class="text-amber-300 font-semibold">- {{ formatCurrency(aporteSpent) }}</span>
+            </div>
+            <div class="flex justify-between text-emerald-400 font-extrabold pt-1 border-t border-white/10 text-sm">
+              <span>Saldo Disponível Líquido:</span>
+              <span>{{ formatCurrency(aporteAvailableNet) }}</span>
+            </div>
           </div>
 
           <label class="block">
@@ -785,7 +989,7 @@ async function deleteCampaign(cardId: string, title: string) {
             <input
               v-model="aporteNotes"
               type="text"
-              placeholder="Ex: Aporte via Meta Ads (semanal)"
+              placeholder="Ex: Meta Ads - Aporte Semanal"
               class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
             />
           </label>

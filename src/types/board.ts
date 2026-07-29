@@ -77,6 +77,8 @@ export interface AppNotification {
 export interface Aporte {
   id: string
   amount: number
+  spentAmount?: number
+  durationDays?: number
   date: string
   startDate: string
   endDate: string
