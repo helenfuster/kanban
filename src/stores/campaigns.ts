@@ -92,6 +92,20 @@ export const useCampaignsStore = defineStore('campaigns', () => {
     saveToStorage()
   }
 
+  function updateAporte(
+    campaignId: string,
+    aporteId: string,
+    updatedData: Partial<Omit<Aporte, 'id'>>,
+  ) {
+    const campaign = campaigns.value.find((c) => c.id === campaignId)
+    if (!campaign) return
+    const aporte = campaign.aportes.find((ap) => ap.id === aporteId)
+    if (!aporte) return
+    Object.assign(aporte, updatedData)
+    campaign.updatedAt = new Date().toISOString()
+    saveToStorage()
+  }
+
   function deleteAporte(campaignId: string, aporteId: string) {
     const campaign = campaigns.value.find((c) => c.id === campaignId)
     if (!campaign) return
@@ -111,6 +125,7 @@ export const useCampaignsStore = defineStore('campaigns', () => {
     init,
     createCampaign,
     addAporte,
+    updateAporte,
     deleteAporte,
     deleteCampaign,
   }

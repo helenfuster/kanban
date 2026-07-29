@@ -8,6 +8,7 @@ import {
   Copy,
   Megaphone,
   MessageCircle,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -46,7 +47,10 @@ const expandedOrganizers = ref<Record<string, boolean>>({})
 // State for Modals
 const showNewCampaignModal = ref(false)
 const showNewAporteModal = ref(false)
+const showEditAporteModal = ref(false)
 const targetCampaignForAporte = ref<Campaign | null>(null)
+const targetCampaignForEditAporte = ref<Campaign | null>(null)
+const editingAporteId = ref<string | null>(null)
 
 // State for WhatsApp Cobrança Modal
 const showWhatsappModal = ref(false)
@@ -73,12 +77,28 @@ const aporteStartDate = ref(new Date().toISOString().slice(0, 10))
 const aporteEndDate = ref('')
 const aporteNotes = ref('')
 
+// Form Fields for Edit Aporte Modal
+const editAporteAmount = ref<number | ''>('')
+const editAporteSpentAmount = ref<number | ''>('')
+const editAporteDurationDays = ref<number | ''>(7)
+const editAporteDate = ref(new Date().toISOString().slice(0, 10))
+const editAporteStartDate = ref(new Date().toISOString().slice(0, 10))
+const editAporteEndDate = ref('')
+const editAporteNotes = ref('')
+
 // Live calculations for New Aporte Modal
 const aporteGross = computed(() => Number(aporteAmount.value) || 0)
 const aporteTax = computed(() => aporteGross.value * META_TAX_RATE)
 const aporteNet = computed(() => aporteGross.value * (1 - META_TAX_RATE))
 const aporteSpent = computed(() => Number(aporteSpentAmount.value) || 0)
 const aporteAvailableNet = computed(() => Math.max(0, aporteNet.value - aporteSpent.value))
+
+// Live calculations for Edit Aporte Modal
+const editAporteGross = computed(() => Number(editAporteAmount.value) || 0)
+const editAporteTax = computed(() => editAporteGross.value * META_TAX_RATE)
+const editAporteNet = computed(() => editAporteGross.value * (1 - META_TAX_RATE))
+const editAporteSpent = computed(() => Number(editAporteSpentAmount.value) || 0)
+const editAporteAvailableNet = computed(() => Math.max(0, editAporteNet.value - editAporteSpent.value))
 
 // Live calculations for Initial Campaign Modal
 const initialGross = computed(() => Number(initialAporteAmount.value) || 0)
@@ -104,6 +124,26 @@ function onAporteEndDateChange() {
     const diff = new Date(eDate).getTime() - new Date(sDate).getTime()
     const days = Math.round(diff / (1000 * 60 * 60 * 24))
     if (days > 0) aporteDurationDays.value = days
+  }
+}
+
+function onEditAporteDaysChange() {
+  const days = Number(editAporteDurationDays.value)
+  const sDate = editAporteStartDate.value || new Date().toISOString().slice(0, 10)
+  if (days && days > 0) {
+    const d = new Date(sDate)
+    d.setDate(d.getDate() + days)
+    editAporteEndDate.value = d.toISOString().slice(0, 10)
+  }
+}
+
+function onEditAporteEndDateChange() {
+  const sDate = editAporteStartDate.value
+  const eDate = editAporteEndDate.value
+  if (sDate && eDate) {
+    const diff = new Date(eDate).getTime() - new Date(sDate).getTime()
+    const days = Math.round(diff / (1000 * 60 * 60 * 24))
+    if (days > 0) editAporteDurationDays.value = days
   }
 }
 
@@ -458,6 +498,24 @@ function openAporteModalForCard(card: Campaign) {
   showNewAporteModal.value = true
 }
 
+function openEditAporteModal(campaign: Campaign, aporte: Aporte) {
+  targetCampaignForEditAporte.value = campaign
+  editingAporteId.value = aporte.id
+  editAporteAmount.value = aporte.amount
+  editAporteSpentAmount.value = aporte.spentAmount || 0
+  editAporteDurationDays.value = aporte.durationDays || 7
+  editAporteDate.value = aporte.date || new Date().toISOString().slice(0, 10)
+  editAporteStartDate.value = aporte.startDate || aporte.date || new Date().toISOString().slice(0, 10)
+  editAporteEndDate.value = aporte.endDate || ''
+  editAporteNotes.value = aporte.notes || ''
+
+  if (!editAporteEndDate.value) {
+    onEditAporteDaysChange()
+  }
+
+  showEditAporteModal.value = true
+}
+
 function submitCreateCampaign() {
   const org = newOrganizerName.value.trim()
   const evt = newEventName.value.trim()
@@ -532,6 +590,42 @@ function submitAddAporte() {
 
   showNewAporteModal.value = false
   targetCampaignForAporte.value = null
+}
+
+function submitEditAporte() {
+  if (!targetCampaignForEditAporte.value || !editingAporteId.value) return
+  const amountNum = Number(editAporteAmount.value)
+  if (!amountNum || amountNum <= 0) return
+
+  const sDate =
+    editAporteStartDate.value ||
+    editAporteDate.value ||
+    new Date().toISOString().slice(0, 10)
+  let eDate = editAporteEndDate.value
+  if (!eDate) {
+    const days = Number(editAporteDurationDays.value) || 7
+    const d = new Date(sDate)
+    d.setDate(d.getDate() + days)
+    eDate = d.toISOString().slice(0, 10)
+  }
+
+  campaignsStore.updateAporte(
+    targetCampaignForEditAporte.value.id,
+    editingAporteId.value,
+    {
+      amount: amountNum,
+      spentAmount: Number(editAporteSpentAmount.value) || 0,
+      durationDays: Number(editAporteDurationDays.value) || undefined,
+      date: editAporteDate.value || sDate,
+      startDate: sDate,
+      endDate: eDate,
+      notes: editAporteNotes.value.trim() || undefined,
+    },
+  )
+
+  showEditAporteModal.value = false
+  targetCampaignForEditAporte.value = null
+  editingAporteId.value = null
 }
 
 function deleteAporte(campaignId: string, aporteId: string) {
@@ -1010,14 +1104,26 @@ function deleteCampaign(campaignId: string, title: string) {
                         ({{ ap.notes }})
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      class="text-text-muted hover:text-danger p-1"
-                      title="Apagar aporte"
-                      @click="deleteAporte(card.id, ap.id)"
-                    >
-                      <Trash2 :size="13" />
-                    </button>
+
+                    <!-- Botões de Ação para cada Aporte: Editar e Excluir -->
+                    <div class="flex items-center gap-1">
+                      <button
+                        type="button"
+                        class="text-text-muted hover:text-text-primary p-1 rounded hover:bg-white/10"
+                        title="Editar este aporte"
+                        @click="openEditAporteModal(card, ap)"
+                      >
+                        <Pencil :size="13" />
+                      </button>
+                      <button
+                        type="button"
+                        class="text-text-muted hover:text-danger p-1 rounded hover:bg-danger/15"
+                        title="Apagar aporte"
+                        @click="deleteAporte(card.id, ap.id)"
+                      >
+                        <Trash2 :size="13" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1318,6 +1424,153 @@ function deleteCampaign(campaignId: string, title: string) {
             class="rounded-xl bg-accent px-4 py-2 text-xs font-bold text-board hover:bg-accent-hover"
           >
             Salvar Aporte
+          </button>
+        </div>
+      </form>
+    </div>
+  </Teleport>
+
+  <!-- MODAL: EDITAR APORTE EXISTENTE -->
+  <Teleport to="body">
+    <div
+      v-if="showEditAporteModal && targetCampaignForEditAporte"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div
+        class="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        @click="showEditAporteModal = false"
+      />
+      <form
+        class="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-board-elevated p-6 shadow-2xl space-y-4"
+        @submit.prevent="submitEditAporte"
+      >
+        <div class="flex items-center justify-between border-b border-white/10 pb-3">
+          <div>
+            <h3 class="text-base font-bold text-text-primary">Editar Aporte</h3>
+            <p class="text-xs text-text-muted">
+              {{ targetCampaignForEditAporte.eventName }} ({{ targetCampaignForEditAporte.organizer }})
+            </p>
+          </div>
+          <button
+            type="button"
+            class="text-text-muted hover:text-text-primary"
+            @click="showEditAporteModal = false"
+          >
+            <X :size="18" />
+          </button>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <label class="block">
+              <span class="font-bold text-text-muted block mb-1">Valor Bruto Aportado (R$) *</span>
+              <input
+                v-model.number="editAporteAmount"
+                type="number"
+                step="0.01"
+                placeholder="Ex: 1000,00"
+                class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
+                required
+              />
+            </label>
+
+            <label class="block">
+              <span class="font-bold text-text-muted block mb-1">Já Investido / Gasto (R$)</span>
+              <input
+                v-model.number="editAporteSpentAmount"
+                type="number"
+                step="0.01"
+                placeholder="Ex: 300,00 (ou 0)"
+                class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
+              />
+            </label>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2">
+            <label class="block">
+              <span class="font-bold text-text-muted block mb-1">Início *</span>
+              <input
+                v-model="editAporteStartDate"
+                type="date"
+                class="w-full rounded-xl border border-border-subtle bg-column px-2 py-2 text-xs text-text-primary outline-none focus:border-accent"
+                required
+                @change="onEditAporteDaysChange"
+              />
+            </label>
+
+            <label class="block">
+              <span class="font-bold text-text-muted block mb-1">Dias *</span>
+              <input
+                v-model.number="editAporteDurationDays"
+                type="number"
+                min="1"
+                placeholder="Ex: 7"
+                class="w-full rounded-xl border border-border-subtle bg-column px-2 py-2 text-xs text-text-primary outline-none focus:border-accent"
+                required
+                @input="onEditAporteDaysChange"
+              />
+            </label>
+
+            <label class="block">
+              <span class="font-bold text-text-muted block mb-1">Término *</span>
+              <input
+                v-model="editAporteEndDate"
+                type="date"
+                class="w-full rounded-xl border border-border-subtle bg-column px-2 py-2 text-xs text-text-primary outline-none focus:border-accent"
+                required
+                @change="onEditAporteEndDateChange"
+              />
+            </label>
+          </div>
+
+          <!-- Prévia dos Cálculos Financeiros do Aporte Editado -->
+          <div v-if="editAporteGross > 0" class="rounded-xl border border-white/10 bg-surface/80 p-3 space-y-1 text-xs">
+            <div class="flex justify-between text-text-muted">
+              <span>Valor Bruto Aportado:</span>
+              <span class="font-semibold text-text-primary">{{ formatCurrency(editAporteGross) }}</span>
+            </div>
+            <div class="flex justify-between text-text-muted">
+              <span>Desconto Imposto Meta (12,15%):</span>
+              <span class="text-danger font-semibold">- {{ formatCurrency(editAporteTax) }}</span>
+            </div>
+            <div class="flex justify-between text-text-muted">
+              <span>Valor Líquido Anúncios:</span>
+              <span class="text-sky-400 font-bold">{{ formatCurrency(editAporteNet) }}</span>
+            </div>
+            <div v-if="editAporteSpent > 0" class="flex justify-between text-text-muted">
+              <span>Já Investido / Gasto:</span>
+              <span class="text-amber-300 font-semibold">- {{ formatCurrency(editAporteSpent) }}</span>
+            </div>
+            <div class="flex justify-between text-emerald-400 font-extrabold pt-1 border-t border-white/10 text-sm">
+              <span>Saldo Disponível Líquido:</span>
+              <span>{{ formatCurrency(editAporteAvailableNet) }}</span>
+            </div>
+          </div>
+
+          <label class="block">
+            <span class="font-bold text-text-muted block mb-1">Observação / Notas (Opcional)</span>
+            <input
+              v-model="editAporteNotes"
+              type="text"
+              placeholder="Ex: Meta Ads - Aporte Semanal"
+              class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
+            />
+          </label>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            class="rounded-xl px-4 py-2 text-xs text-text-muted hover:bg-white/5"
+            @click="showEditAporteModal = false"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            class="rounded-xl bg-accent px-4 py-2 text-xs font-bold text-board hover:bg-accent-hover"
+          >
+            Salvar Alterações
           </button>
         </div>
       </form>
