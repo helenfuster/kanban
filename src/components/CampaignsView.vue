@@ -139,25 +139,27 @@ function calculateEventRoas(ev: WhatsappEventMetrics) {
 function openWhatsappModalForOrganizer(orgName: string, singleCampaign?: Campaign) {
   whatsappOrganizerName.value = orgName
   
-  let campaignsToInclude: Campaign[] = []
-  if (singleCampaign) {
-    campaignsToInclude = [singleCampaign]
-  } else {
-    // Only include campaigns ending in 1 to 2 days (or expired)
-    const allOrgCampaigns = campaignsStore.campaigns.filter(
-      (c) => (c.organizer || '').trim().toLowerCase() === orgName.trim().toLowerCase(),
-    )
-    
-    const criticalCampaigns = allOrgCampaigns.filter((c) => {
-      const stats = getCardAporteStats(c as any)
-      return (
-        stats.status === 'ending_soon' ||
-        stats.status === 'expired' ||
-        (stats.daysRemaining !== null && stats.daysRemaining !== undefined && stats.daysRemaining <= 2)
-      )
-    })
+  // Find all campaigns for this organizer
+  const allOrgCampaigns = campaignsStore.campaigns.filter(
+    (c) => (c.organizer || '').trim().toLowerCase() === orgName.trim().toLowerCase(),
+  )
 
-    campaignsToInclude = criticalCampaigns.length > 0 ? criticalCampaigns : allOrgCampaigns
+  // Filter campaigns ending in 1 to 2 days or expired
+  const criticalCampaigns = allOrgCampaigns.filter((c) => {
+    const stats = getCardAporteStats(c as any)
+    return (
+      stats.status === 'ending_soon' ||
+      stats.status === 'expired' ||
+      (stats.daysRemaining !== null && stats.daysRemaining !== undefined && stats.daysRemaining <= 2)
+    )
+  })
+
+  // Group all critical campaigns for the organizer together
+  let campaignsToInclude = criticalCampaigns.length > 0 ? criticalCampaigns : allOrgCampaigns
+
+  // If triggered for a single specific campaign that is not in the critical set, fallback to that campaign
+  if (singleCampaign && !campaignsToInclude.some((c) => c.id === singleCampaign.id)) {
+    campaignsToInclude = [singleCampaign]
   }
 
   whatsappEvents.value = campaignsToInclude.map((c) => {
@@ -180,10 +182,10 @@ function openWhatsappModalForOrganizer(orgName: string, singleCampaign?: Campaig
       endDateText: endStr,
       daysRemaining: daysRem,
       status: stats.status,
-      salesCount: '',
-      spentAmount: spent || '',
-      revenueAmount: '',
-      roas: '',
+      salesCount: 0,
+      spentAmount: spent || 0,
+      revenueAmount: 0,
+      roas: '0,00',
     }
   })
 
@@ -199,16 +201,23 @@ const generatedWhatsappReport = computed(() => {
   // Intro Paragraph according to user specification
   if (whatsappEvents.value.length === 1) {
     const ev = whatsappEvents.value[0]
-    const daysText =
-      ev.status === 'expired'
-        ? 'já encerrou'
-        : ev.daysRemaining <= 0
-          ? 'encerra hoje'
-          : `encerra em ${ev.daysRemaining} dia(s)`
-
-    lines.push(`Passando para avisar que a veiculação da campanha do evento ${ev.eventName} no Meta Ads ${daysText}.\n`)
+    lines.push(
+      `Passando para avisar que a veiculação da campanha do evento ${ev.eventName} encerra em ${ev.daysRemaining} dia(s).\n`,
+    )
   } else {
-    lines.push(`Passando para avisar que a veiculação das campanhas no Meta Ads encerra nos próximos dias.\n`)
+    const names = whatsappEvents.value.map((e) => e.eventName)
+    let joinedNames = ''
+    if (names.length === 2) {
+      joinedNames = `${names[0]} e o ${names[1]}`
+    } else {
+      const last = names[names.length - 1]
+      const initial = names.slice(0, -1).join(', ')
+      joinedNames = `${initial} e o ${last}`
+    }
+
+    lines.push(
+      `Passando para avisar que a veiculação da campanha do evento ${joinedNames} está prestes a se encerrar.\n`,
+    )
   }
 
   // Header Block
@@ -235,8 +244,10 @@ const generatedWhatsappReport = computed(() => {
     lines.push(`ROAS: ${roasStr}`)
   })
 
-  // Outro Paragraph according to user specification
-  lines.push(`\nPara garantirmos a continuidade dos anúncios e vendas sem interrupções, podemos seguir com o próximo aporte? 🚀`)
+  // Outro Paragraph
+  lines.push(
+    `\nPara garantirmos a continuidade dos anúncios e vendas sem interrupções, podemos seguir com o próximo aporte? 🚀`,
+  )
 
   return lines.join('\n')
 })
@@ -1318,7 +1329,7 @@ function deleteCampaign(campaignId: string, title: string) {
                 <input
                   v-model="ev.endDateText"
                   type="text"
-                  placeholder="Ex: Acaba dia 29/07"
+                  placeholder="Ex: Acaba dia 30/07"
                   class="rounded-lg border border-border-subtle bg-column px-2 py-1 text-[11px] text-text-primary outline-none focus:border-accent w-28 text-right font-semibold"
                 />
               </div>
@@ -1329,7 +1340,7 @@ function deleteCampaign(campaignId: string, title: string) {
                   <input
                     v-model.number="ev.salesCount"
                     type="number"
-                    placeholder="Ex: 32"
+                    placeholder="Ex: 0"
                     class="mt-0.5 w-full rounded-lg border border-border-subtle bg-column px-2 py-1 text-xs text-text-primary outline-none focus:border-accent"
                   />
                 </label>
@@ -1340,7 +1351,7 @@ function deleteCampaign(campaignId: string, title: string) {
                     v-model.number="ev.spentAmount"
                     type="number"
                     step="0.01"
-                    placeholder="Ex: 716.33"
+                    placeholder="Ex: 100.00"
                     class="mt-0.5 w-full rounded-lg border border-border-subtle bg-column px-2 py-1 text-xs text-text-primary outline-none focus:border-accent"
                     @input="calculateEventRoas(ev)"
                   />
@@ -1352,7 +1363,7 @@ function deleteCampaign(campaignId: string, title: string) {
                     v-model.number="ev.revenueAmount"
                     type="number"
                     step="0.01"
-                    placeholder="Ex: 1799.68"
+                    placeholder="Ex: 0.00"
                     class="mt-0.5 w-full rounded-lg border border-border-subtle bg-column px-2 py-1 text-xs text-text-primary outline-none focus:border-accent"
                     @input="calculateEventRoas(ev)"
                   />
@@ -1364,7 +1375,7 @@ function deleteCampaign(campaignId: string, title: string) {
                     v-model.number="ev.roas"
                     type="number"
                     step="0.01"
-                    placeholder="Ex: 2.51"
+                    placeholder="Ex: 0.00"
                     class="mt-0.5 w-full rounded-lg border border-border-subtle bg-column px-2 py-1 text-xs font-bold text-emerald-400 outline-none focus:border-accent"
                   />
                 </label>
@@ -1391,7 +1402,7 @@ function deleteCampaign(campaignId: string, title: string) {
             Relatório copiado com sucesso! Prático para colar no WhatsApp.
           </span>
           <span v-else class="text-[11px] text-text-muted">
-            Mensagem adaptada com a introdução e o pedido do novo aporte.
+            Formatado exatamente para 1 ou múltiplos eventos do mesmo organizador.
           </span>
 
           <div class="flex items-center gap-2">
