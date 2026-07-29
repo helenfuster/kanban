@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import {
-  BarChart3,
   CalendarDays,
   Columns3,
+  LayoutGrid,
   ListChecks,
   Megaphone,
   NotebookPen,
@@ -30,7 +30,7 @@ const tabs: { id: NavTab; label: string; icon: typeof CalendarDays }[] = [
   { id: 'daily', label: 'Tarefas', icon: ListChecks },
   { id: 'notes', label: 'Notas', icon: NotebookPen },
   { id: 'campaigns', label: 'Campanhas', icon: Megaphone },
-  { id: 'charts', label: 'Gráficos', icon: BarChart3 },
+  { id: 'charts', label: 'Hub', icon: LayoutGrid },
 ]
 </script>
 

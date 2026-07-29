@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   ChevronDown,
   ChevronUp,
@@ -10,10 +10,16 @@ import {
   Trophy,
   X,
 } from '@lucide/vue'
-import { getCardAporteStats, META_TAX_RATE, useBoardStore } from '../stores/board'
-import type { Aporte, Card } from '../types/board'
+import { getCardAporteStats, META_TAX_RATE } from '../stores/board'
+import { useCampaignsStore } from '../stores/campaigns'
+import type { Aporte } from '../types/board'
+import type { Campaign } from '../stores/campaigns'
 
-const board = useBoardStore()
+const campaignsStore = useCampaignsStore()
+
+onMounted(() => {
+  campaignsStore.init()
+})
 
 const searchQuery = ref('')
 const selectedStatusFilter = ref<
@@ -24,7 +30,7 @@ const expandedOrganizers = ref<Record<string, boolean>>({})
 // State for Modals
 const showNewCampaignModal = ref(false)
 const showNewAporteModal = ref(false)
-const targetCardForAporte = ref<Card | null>(null)
+const targetCampaignForAporte = ref<Campaign | null>(null)
 
 // Form Fields for New Campaign
 const newOrganizerName = ref('')
@@ -89,16 +95,8 @@ function onInitialDaysChange() {
   }
 }
 
-// All cards that are considered campaigns (have organizer, eventName, or aportes)
-const campaignCards = computed(() => {
-  return board.cards.filter((card) => {
-    return Boolean(
-      card.organizer ||
-        card.eventName ||
-        (card.aportes && card.aportes.length > 0),
-    )
-  })
-})
+// All campaign items stored exclusively in useCampaignsStore
+const campaignCards = computed(() => campaignsStore.campaigns)
 
 // Unique list of organizers
 const existingOrganizers = computed(() => {
@@ -111,11 +109,11 @@ const existingOrganizers = computed(() => {
   return Array.from(set).sort()
 })
 
-// Filtered campaign cards
+// Filtered campaign items
 const filteredCards = computed(() => {
   return campaignCards.value.filter((card) => {
     const org = (card.organizer || '').toLowerCase()
-    const evt = (card.eventName || card.title).toLowerCase()
+    const evt = (card.eventName || '').toLowerCase()
     const query = searchQuery.value.toLowerCase().trim()
 
     const matchesQuery = !query || org.includes(query) || evt.includes(query)
@@ -124,7 +122,7 @@ const filteredCards = computed(() => {
 
     if (selectedStatusFilter.value === 'all') return true
 
-    const stats = getCardAporteStats(card)
+    const stats = getCardAporteStats(card as any)
     if (selectedStatusFilter.value === 'active') {
       return stats.status === 'active'
     }
@@ -144,7 +142,7 @@ const groupedByOrganizer = computed(() => {
     string,
     {
       organizer: string
-      cards: Card[]
+      cards: Campaign[]
       totalGross: number
       totalNet: number
       totalSpent: number
@@ -166,7 +164,7 @@ const groupedByOrganizer = computed(() => {
         activeCount: 0,
       }
     }
-    const stats = getCardAporteStats(card)
+    const stats = getCardAporteStats(card as any)
     groups[orgKey].cards.push(card)
     groups[orgKey].totalGross += stats.totalGross
     groups[orgKey].totalNet += stats.totalNet
@@ -195,7 +193,7 @@ const overallStats = computed(() => {
 
   campaignCards.value.forEach((card) => {
     if (card.organizer?.trim()) organizersSet.add(card.organizer.trim())
-    const stats = getCardAporteStats(card)
+    const stats = getCardAporteStats(card as any)
     totalGross += stats.totalGross
     totalTax += stats.totalTax
     totalNet += stats.totalNet
@@ -240,8 +238,8 @@ function formatDateBr(dateStr: string) {
   return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`
 }
 
-function openAporteModalForCard(card: Card) {
-  targetCardForAporte.value = card
+function openAporteModalForCard(card: Campaign) {
+  targetCampaignForAporte.value = card
   aporteAmount.value = ''
   aporteSpentAmount.value = ''
   aporteDurationDays.value = 7
@@ -253,51 +251,40 @@ function openAporteModalForCard(card: Card) {
   showNewAporteModal.value = true
 }
 
-async function submitCreateCampaign() {
+function submitCreateCampaign() {
   const org = newOrganizerName.value.trim()
   const evt = newEventName.value.trim()
   if (!org || !evt) return
 
-  const firstCol = board.columns[0]
-  if (!firstCol) return
-
-  const cardTitle = `${evt} - ${org}`
-  const createdCard = await board.addCard(firstCol.id, cardTitle)
-
-  if (createdCard) {
-    const aportes: Omit<Aporte, 'id'>[] = []
-    const amountNum = Number(initialAporteAmount.value)
-    if (amountNum && amountNum > 0) {
-      const sDate =
-        initialStartDate.value || new Date().toISOString().slice(0, 10)
-      let eDate = initialEndDate.value
-      if (!eDate) {
-        const days = Number(initialDurationDays.value) || 7
-        const d = new Date(sDate)
-        d.setDate(d.getDate() + days)
-        eDate = d.toISOString().slice(0, 10)
-      }
-      aportes.push({
-        amount: amountNum,
-        spentAmount: Number(initialSpentAmount.value) || 0,
-        durationDays: Number(initialDurationDays.value) || undefined,
-        date: sDate,
-        startDate: sDate,
-        endDate: eDate,
-        notes: initialNotes.value.trim() || undefined,
-      })
+  let initialAporte: Omit<Aporte, 'id'> | undefined = undefined
+  const amountNum = Number(initialAporteAmount.value)
+  if (amountNum && amountNum > 0) {
+    const sDate =
+      initialStartDate.value || new Date().toISOString().slice(0, 10)
+    let eDate = initialEndDate.value
+    if (!eDate) {
+      const days = Number(initialDurationDays.value) || 7
+      const d = new Date(sDate)
+      d.setDate(d.getDate() + days)
+      eDate = d.toISOString().slice(0, 10)
     }
-
-    await board.updateCard(createdCard.id, {
-      organizer: org,
-      eventName: evt,
-      description: `Campanha para o evento ${evt} do organizador ${org}.`,
-    })
-
-    if (aportes.length > 0) {
-      await board.addAporte(createdCard.id, aportes[0])
+    initialAporte = {
+      amount: amountNum,
+      spentAmount: Number(initialSpentAmount.value) || 0,
+      durationDays: Number(initialDurationDays.value) || undefined,
+      date: sDate,
+      startDate: sDate,
+      endDate: eDate,
+      notes: initialNotes.value.trim() || undefined,
     }
   }
+
+  campaignsStore.createCampaign(
+    org,
+    evt,
+    `Campanha para o evento ${evt} do organizador ${org}.`,
+    initialAporte,
+  )
 
   // Reset modal fields
   newOrganizerName.value = ''
@@ -309,8 +296,8 @@ async function submitCreateCampaign() {
   showNewCampaignModal.value = false
 }
 
-async function submitAddAporte() {
-  if (!targetCardForAporte.value) return
+function submitAddAporte() {
+  if (!targetCampaignForAporte.value) return
   const amountNum = Number(aporteAmount.value)
   if (!amountNum || amountNum <= 0) return
 
@@ -326,7 +313,7 @@ async function submitAddAporte() {
     eDate = d.toISOString().slice(0, 10)
   }
 
-  await board.addAporte(targetCardForAporte.value.id, {
+  campaignsStore.addAporte(targetCampaignForAporte.value.id, {
     amount: amountNum,
     spentAmount: Number(aporteSpentAmount.value) || 0,
     durationDays: Number(aporteDurationDays.value) || undefined,
@@ -337,18 +324,18 @@ async function submitAddAporte() {
   })
 
   showNewAporteModal.value = false
-  targetCardForAporte.value = null
+  targetCampaignForAporte.value = null
 }
 
-async function deleteAporte(cardId: string, aporteId: string) {
+function deleteAporte(campaignId: string, aporteId: string) {
   if (window.confirm('Excluir este aporte do histórico?')) {
-    await board.deleteAporte(cardId, aporteId)
+    campaignsStore.deleteAporte(campaignId, aporteId)
   }
 }
 
-async function deleteCampaign(cardId: string, title: string) {
+function deleteCampaign(campaignId: string, title: string) {
   if (window.confirm(`Tem certeza que deseja excluir a campanha "${title}"?`)) {
-    await board.deleteCard(cardId)
+    campaignsStore.deleteCampaign(campaignId)
   }
 }
 </script>
@@ -369,7 +356,7 @@ async function deleteCampaign(cardId: string, title: string) {
             </h1>
           </div>
           <p class="mt-1 text-xs text-text-muted">
-            Gestão financeira de aportes com dedução do imposto do Meta Ads (12,15%), saldo disponível e controle de dias.
+            Gestão financeira independente de organizadores, eventos esportivos e prazos do Meta Ads.
           </p>
         </div>
 
@@ -579,30 +566,30 @@ async function deleteCampaign(cardId: string, title: string) {
                   <div class="flex items-center gap-2">
                     <Trophy :size="16" class="text-amber-400 shrink-0" />
                     <h3 class="text-sm font-bold text-text-primary">
-                      {{ card.eventName || card.title }}
+                      {{ card.eventName }}
                     </h3>
                   </div>
                   <p class="mt-0.5 text-[11px] text-text-muted">
-                    Cartão no Kanban: <span class="font-medium text-text-secondary">{{ card.title }}</span>
+                    Organizador: <span class="font-medium text-text-secondary">{{ card.organizer }}</span>
                   </p>
                 </div>
 
                 <div class="flex items-center gap-2">
                   <!-- Tag de Status da Veiculação -->
                   <span
-                    v-if="getCardAporteStats(card).status === 'active'"
+                    v-if="getCardAporteStats(card as any).status === 'active'"
                     class="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-300"
                   >
-                    🟢 Em Veiculação ({{ getCardAporteStats(card).daysRemaining }}d restante(s))
+                    🟢 Em Veiculação ({{ getCardAporteStats(card as any).daysRemaining }}d restante(s))
                   </span>
                   <span
-                    v-else-if="getCardAporteStats(card).status === 'ending_soon'"
+                    v-else-if="getCardAporteStats(card as any).status === 'ending_soon'"
                     class="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-bold text-amber-300"
                   >
-                    🟡 Vence em breve ({{ getCardAporteStats(card).daysRemaining }}d)
+                    🟡 Vence em breve ({{ getCardAporteStats(card as any).daysRemaining }}d)
                   </span>
                   <span
-                    v-else-if="getCardAporteStats(card).status === 'expired'"
+                    v-else-if="getCardAporteStats(card as any).status === 'expired'"
                     class="inline-flex items-center gap-1 rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-bold text-red-300"
                   >
                     🔴 Veiculação Encerrada
@@ -628,7 +615,7 @@ async function deleteCampaign(cardId: string, title: string) {
                     type="button"
                     class="rounded-lg p-1 text-text-muted hover:bg-danger/15 hover:text-danger"
                     title="Excluir Evento"
-                    @click="deleteCampaign(card.id, card.eventName || card.title)"
+                    @click="deleteCampaign(card.id, card.eventName)"
                   >
                     <Trash2 :size="14" />
                   </button>
@@ -640,7 +627,7 @@ async function deleteCampaign(cardId: string, title: string) {
                 <div>
                   <span class="text-[10px] text-text-muted block font-semibold uppercase">Bruto Aportado</span>
                   <span class="font-bold text-text-primary text-xs">
-                    {{ formatCurrency(getCardAporteStats(card).totalGross) }}
+                    {{ formatCurrency(getCardAporteStats(card as any).totalGross) }}
                   </span>
                   <span class="text-[9px] text-text-muted block">Meta: -12,15%</span>
                 </div>
@@ -648,22 +635,22 @@ async function deleteCampaign(cardId: string, title: string) {
                 <div>
                   <span class="text-[10px] text-text-muted block font-semibold uppercase">Líquido Anúncios</span>
                   <span class="font-bold text-sky-400 text-xs">
-                    {{ formatCurrency(getCardAporteStats(card).totalNet) }}
+                    {{ formatCurrency(getCardAporteStats(card as any).totalNet) }}
                   </span>
-                  <span class="text-[9px] text-text-muted block">Taxa: {{ formatCurrency(getCardAporteStats(card).totalTax) }}</span>
+                  <span class="text-[9px] text-text-muted block">Taxa: {{ formatCurrency(getCardAporteStats(card as any).totalTax) }}</span>
                 </div>
 
                 <div>
                   <span class="text-[10px] text-text-muted block font-semibold uppercase">Já Investido / Gasto</span>
                   <span class="font-bold text-amber-300 text-xs">
-                    {{ formatCurrency(getCardAporteStats(card).totalSpent) }}
+                    {{ formatCurrency(getCardAporteStats(card as any).totalSpent) }}
                   </span>
                 </div>
 
                 <div class="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2">
                   <span class="text-[10px] text-emerald-300 block font-bold uppercase">Saldo Disponível</span>
                   <span class="font-extrabold text-emerald-400 text-sm">
-                    {{ formatCurrency(getCardAporteStats(card).totalAvailableNet) }}
+                    {{ formatCurrency(getCardAporteStats(card as any).totalAvailableNet) }}
                   </span>
                 </div>
               </div>
@@ -870,7 +857,7 @@ async function deleteCampaign(cardId: string, title: string) {
   <!-- MODAL: ADICIONAR APORTE -->
   <Teleport to="body">
     <div
-      v-if="showNewAporteModal && targetCardForAporte"
+      v-if="showNewAporteModal && targetCampaignForAporte"
       class="fixed inset-0 z-50 flex items-center justify-center p-4"
     >
       <div
@@ -885,7 +872,7 @@ async function deleteCampaign(cardId: string, title: string) {
           <div>
             <h3 class="text-base font-bold text-text-primary">Registrar Novo Aporte</h3>
             <p class="text-xs text-text-muted">
-              {{ targetCardForAporte.eventName || targetCardForAporte.title }} ({{ targetCardForAporte.organizer }})
+              {{ targetCampaignForAporte.eventName }} ({{ targetCampaignForAporte.organizer }})
             </p>
           </div>
           <button
