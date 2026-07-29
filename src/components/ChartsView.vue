@@ -28,11 +28,19 @@ export interface HubLink {
   title: string
   url: string
   brand: 'runff' | 'kalfe'
-  category: 'planilha' | 'marketplace' | 'meta_ads' | 'outro'
+  category: string
   description?: string
 }
 
 const STORAGE_LINKS_KEY = 'kanban_hub_all_links_v2'
+const STORAGE_CATEGORIES_KEY = 'kanban_hub_custom_categories_v1'
+
+const defaultCategories = [
+  'Planilha / Google Sheets',
+  'Marketplace (ML, Netshoes, Amazon, Zattini)',
+  'Meta / Google Ads',
+  'Outro Link Utilitário',
+]
 
 const defaultLinks: HubLink[] = [
   // Runff
@@ -41,7 +49,7 @@ const defaultLinks: HubLink[] = [
     title: 'Planilha de Aportes Runff',
     url: 'https://docs.google.com',
     brand: 'runff',
-    category: 'planilha',
+    category: 'Planilha / Google Sheets',
     description: 'Controle de investimentos e aportes de organizadores',
   },
   {
@@ -49,7 +57,7 @@ const defaultLinks: HubLink[] = [
     title: 'ClickUp Runff (Eventos)',
     url: 'https://clickup.com',
     brand: 'runff',
-    category: 'outro',
+    category: 'Outro Link Utilitário',
     description: 'Demandas e tarefas recebidas de organizadores',
   },
   {
@@ -57,7 +65,7 @@ const defaultLinks: HubLink[] = [
     title: 'Meta Ads Manager (Runff)',
     url: 'https://business.facebook.com',
     brand: 'runff',
-    category: 'meta_ads',
+    category: 'Meta / Google Ads',
     description: 'Gerenciador de anúncios Meta da Runff',
   },
   // Kalfe
@@ -66,7 +74,7 @@ const defaultLinks: HubLink[] = [
     title: 'Mercado Livre Seller Center',
     url: 'https://www.mercadolivre.com.br',
     brand: 'kalfe',
-    category: 'marketplace',
+    category: 'Marketplace (ML, Netshoes, Amazon, Zattini)',
     description: 'Painel de produtos e Product Ads Mercado Livre',
   },
   {
@@ -74,7 +82,7 @@ const defaultLinks: HubLink[] = [
     title: 'Netshoes Partner Ads',
     url: 'https://www.netshoes.com.br',
     brand: 'kalfe',
-    category: 'marketplace',
+    category: 'Marketplace (ML, Netshoes, Amazon, Zattini)',
     description: 'Gestão de anúncios e catálogo Netshoes',
   },
   {
@@ -82,7 +90,7 @@ const defaultLinks: HubLink[] = [
     title: 'Zattini Partner',
     url: 'https://www.zattini.com.br',
     brand: 'kalfe',
-    category: 'marketplace',
+    category: 'Marketplace (ML, Netshoes, Amazon, Zattini)',
     description: 'Gestão de campanhas Zattini',
   },
   {
@@ -90,7 +98,7 @@ const defaultLinks: HubLink[] = [
     title: 'Amazon Seller Central',
     url: 'https://sellercentral.amazon.com.br',
     brand: 'kalfe',
-    category: 'marketplace',
+    category: 'Marketplace (ML, Netshoes, Amazon, Zattini)',
     description: 'Painel de vendas e Sponsored Products Amazon',
   },
   {
@@ -98,7 +106,7 @@ const defaultLinks: HubLink[] = [
     title: 'Planilha de MKT Kalfe',
     url: 'https://docs.google.com',
     brand: 'kalfe',
-    category: 'planilha',
+    category: 'Planilha / Google Sheets',
     description: 'Planejamento de tráfego e marketplace ads',
   },
 ]
@@ -111,8 +119,9 @@ const period = ref<PeriodType>('daily')
 const sourceFilter = ref<SourceFilter>('all')
 const hoveredBarIndex = ref<number | null>(null)
 
-// Links State
+// Links & Categories State
 const hubLinks = ref<HubLink[]>([])
+const customCategories = ref<string[]>([])
 const showAddLinkModal = ref(false)
 const showEditLinkModal = ref(false)
 
@@ -120,7 +129,7 @@ const showEditLinkModal = ref(false)
 const newLinkTitle = ref('')
 const newLinkUrl = ref('')
 const newLinkBrand = ref<'runff' | 'kalfe'>('runff')
-const newLinkCategory = ref<'planilha' | 'marketplace' | 'meta_ads' | 'outro'>('planilha')
+const newLinkCategory = ref('Planilha / Google Sheets')
 const newLinkDesc = ref('')
 
 // Edit Form Fields
@@ -128,20 +137,29 @@ const editingLinkId = ref<string | null>(null)
 const editLinkTitle = ref('')
 const editLinkUrl = ref('')
 const editLinkBrand = ref<'runff' | 'kalfe'>('runff')
-const editLinkCategory = ref<'planilha' | 'marketplace' | 'meta_ads' | 'outro'>('planilha')
+const editLinkCategory = ref('Planilha / Google Sheets')
 const editLinkDesc = ref('')
 
-function loadLinks() {
+function loadLinksAndCategories() {
   try {
-    const raw = localStorage.getItem(STORAGE_LINKS_KEY)
-    if (raw) {
-      hubLinks.value = JSON.parse(raw)
+    const rawLinks = localStorage.getItem(STORAGE_LINKS_KEY)
+    if (rawLinks) {
+      hubLinks.value = JSON.parse(rawLinks)
     } else {
       hubLinks.value = [...defaultLinks]
       saveLinks()
     }
   } catch {
     hubLinks.value = [...defaultLinks]
+  }
+
+  try {
+    const rawCat = localStorage.getItem(STORAGE_CATEGORIES_KEY)
+    if (rawCat) {
+      customCategories.value = JSON.parse(rawCat)
+    }
+  } catch {
+    customCategories.value = []
   }
 }
 
@@ -153,21 +171,54 @@ function saveLinks() {
   }
 }
 
+function saveCustomCategory(category: string) {
+  const clean = category.trim()
+  if (!clean) return
+  if (!customCategories.value.includes(clean) && !defaultCategories.includes(clean)) {
+    customCategories.value.push(clean)
+    try {
+      localStorage.setItem(STORAGE_CATEGORIES_KEY, JSON.stringify(customCategories.value))
+    } catch (err) {
+      console.error('Error saving categories', err)
+    }
+  }
+}
+
+const availableCategories = computed(() => {
+  const set = new Set<string>([...defaultCategories, ...customCategories.value])
+  hubLinks.value.forEach((l) => {
+    if (l.category?.trim()) set.add(l.category.trim())
+  })
+  return Array.from(set)
+})
+
+function getCategoryBadge(cat: string): string {
+  if (!cat) return '🔗 Link'
+  const lower = cat.toLowerCase()
+  if (lower.includes('planilha') || lower.includes('sheet')) return `📊 ${cat}`
+  if (lower.includes('marketplace') || lower.includes('mercado') || lower.includes('loja')) return `🛒 ${cat}`
+  if (lower.includes('meta') || lower.includes('google') || lower.includes('ads')) return `📢 ${cat}`
+  return `🏷️ ${cat}`
+}
+
 function submitAddLink() {
   const title = newLinkTitle.value.trim()
   let url = newLinkUrl.value.trim()
+  const cat = newLinkCategory.value.trim() || 'Outro Link Utilitário'
   if (!title || !url) return
 
   if (!/^https?:\/\//i.test(url)) {
     url = `https://${url}`
   }
 
+  saveCustomCategory(cat)
+
   const newLink: HubLink = {
     id: `link-${Date.now()}`,
     title,
     url,
     brand: newLinkBrand.value,
-    category: newLinkCategory.value,
+    category: cat,
     description: newLinkDesc.value.trim() || undefined,
   }
 
@@ -197,14 +248,17 @@ function submitEditLink() {
   if (!link) return
 
   let url = editLinkUrl.value.trim()
+  const cat = editLinkCategory.value.trim() || 'Outro Link Utilitário'
   if (!/^https?:\/\//i.test(url)) {
     url = `https://${url}`
   }
 
+  saveCustomCategory(cat)
+
   link.title = editLinkTitle.value.trim()
   link.url = url
   link.brand = editLinkBrand.value
-  link.category = editLinkCategory.value
+  link.category = cat
   link.description = editLinkDesc.value.trim() || undefined
 
   saveLinks()
@@ -223,7 +277,7 @@ const runffLinks = computed(() => hubLinks.value.filter((l) => l.brand === 'runf
 const kalfeLinks = computed(() => hubLinks.value.filter((l) => l.brand === 'kalfe'))
 
 onMounted(async () => {
-  loadLinks()
+  loadLinksAndCategories()
   campaignsStore.init()
   if (!dailyStore.ready) {
     await dailyStore.init()
@@ -539,7 +593,7 @@ const maxChartValue = computed(() => {
             <div>
               <div class="flex items-center justify-between gap-2">
                 <span class="inline-flex items-center gap-1 rounded bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-orange-300">
-                  {{ link.category === 'planilha' ? '📊 Planilha' : link.category === 'meta_ads' ? '📢 Meta Ads' : '🔗 Link' }}
+                  {{ getCategoryBadge(link.category) }}
                 </span>
                 
                 <!-- Botões de Ação: Editar e Excluir -->
@@ -607,7 +661,7 @@ const maxChartValue = computed(() => {
             <div>
               <div class="flex items-center justify-between gap-2">
                 <span class="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-300">
-                  {{ link.category === 'marketplace' ? '🛒 Marketplace' : link.category === 'planilha' ? '📊 Planilha' : '🔗 Link' }}
+                  {{ getCategoryBadge(link.category) }}
                 </span>
                 
                 <!-- Botões de Ação: Editar e Excluir -->
@@ -940,16 +994,18 @@ const maxChartValue = computed(() => {
           </label>
 
           <label class="block">
-            <span class="font-bold text-text-muted block mb-1">Categoria</span>
-            <select
+            <span class="font-bold text-text-muted block mb-1">Categoria (Selecione ou Digite uma Nova) *</span>
+            <input
               v-model="newLinkCategory"
+              type="text"
+              placeholder="Ex: Planilha, Marketplace, Financeiro, Relatórios..."
+              list="categories-add-list"
               class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
-            >
-              <option value="planilha">📊 Planilha / Google Sheets</option>
-              <option value="marketplace">🛒 Marketplace (ML, Netshoes, Amazon, Zattini)</option>
-              <option value="meta_ads">📢 Meta / Google Ads</option>
-              <option value="outro">🔗 Outro Link Utilitário</option>
-            </select>
+              required
+            />
+            <datalist id="categories-add-list">
+              <option v-for="cat in availableCategories" :key="cat" :value="cat" />
+            </datalist>
           </label>
 
           <label class="block">
@@ -1059,16 +1115,18 @@ const maxChartValue = computed(() => {
           </label>
 
           <label class="block">
-            <span class="font-bold text-text-muted block mb-1">Categoria</span>
-            <select
+            <span class="font-bold text-text-muted block mb-1">Categoria (Selecione ou Digite uma Nova) *</span>
+            <input
               v-model="editLinkCategory"
+              type="text"
+              placeholder="Ex: Planilha, Marketplace, Financeiro, Relatórios..."
+              list="categories-edit-list"
               class="w-full rounded-xl border border-border-subtle bg-column px-3 py-2 text-xs text-text-primary outline-none focus:border-accent"
-            >
-              <option value="planilha">📊 Planilha / Google Sheets</option>
-              <option value="marketplace">🛒 Marketplace (ML, Netshoes, Amazon, Zattini)</option>
-              <option value="meta_ads">📢 Meta / Google Ads</option>
-              <option value="outro">🔗 Outro Link Utilitário</option>
-            </select>
+              required
+            />
+            <datalist id="categories-edit-list">
+              <option v-for="cat in availableCategories" :key="cat" :value="cat" />
+            </datalist>
           </label>
 
           <label class="block">
