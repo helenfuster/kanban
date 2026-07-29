@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import {
+  AlertTriangle,
+  Check,
   ChevronDown,
   ChevronUp,
+  Copy,
   Megaphone,
+  MessageCircle,
   Plus,
   Search,
   Trash2,
@@ -31,6 +35,11 @@ const expandedOrganizers = ref<Record<string, boolean>>({})
 const showNewCampaignModal = ref(false)
 const showNewAporteModal = ref(false)
 const targetCampaignForAporte = ref<Campaign | null>(null)
+
+// State for WhatsApp Cobrança Modal
+const showWhatsappModal = ref(false)
+const targetCampaignForWhatsapp = ref<Campaign | null>(null)
+const copiedWhatsappMsg = ref(false)
 
 // Form Fields for New Campaign
 const newOrganizerName = ref('')
@@ -98,6 +107,61 @@ function onInitialDaysChange() {
 // All campaign items stored exclusively in useCampaignsStore
 const campaignCards = computed(() => campaignsStore.campaigns)
 
+// List of campaigns requiring urgent renewal (ending in <= 2 days or expired)
+const renewalAlertCampaigns = computed(() => {
+  return campaignCards.value.filter((c) => {
+    const stats = getCardAporteStats(c as any)
+    return stats.status === 'ending_soon' || stats.status === 'expired'
+  })
+})
+
+// Generated WhatsApp Message
+const whatsappMessage = computed(() => {
+  if (!targetCampaignForWhatsapp.value) return ''
+  const c = targetCampaignForWhatsapp.value
+  const stats = getCardAporteStats(c as any)
+  const remaining = stats.daysRemaining ?? 0
+  const daysText =
+    stats.status === 'expired'
+      ? 'encetou/encerrou'
+      : remaining <= 0
+        ? 'encerra hoje'
+        : `encerra em ${remaining} dia(s)`
+
+  const startDateStr = stats.activeAporte?.startDate ? formatDateBr(stats.activeAporte.startDate) : ''
+  const endDateStr = stats.activeAporte?.endDate ? formatDateBr(stats.activeAporte.endDate) : ''
+  const periodText = startDateStr && endDateStr ? `${startDateStr} a ${endDateStr}` : 'em andamento'
+
+  return `Olá ${c.organizer}! Tudo bem?
+
+Passando para avisar que a veiculação da campanha do evento *${c.eventName}* no Meta Ads ${daysText}.
+
+📊 *Resumo Atual do Investimento:*
+• Saldo Líquido Disponível: ${formatCurrency(stats.totalAvailableNet)}
+• Período de Veiculação: ${periodText}
+
+Para garantirmos a continuidade dos anúncios e vendas sem interrupções, podemos alinhar o próximo aporte? 🚀`
+})
+
+function openWhatsappModal(campaign: Campaign) {
+  targetCampaignForWhatsapp.value = campaign
+  copiedWhatsappMsg.value = false
+  showWhatsappModal.value = true
+}
+
+async function copyWhatsappMessage() {
+  if (!whatsappMessage.value) return
+  try {
+    await navigator.clipboard.writeText(whatsappMessage.value)
+    copiedWhatsappMsg.value = true
+    setTimeout(() => {
+      copiedWhatsappMsg.value = false
+    }, 3000)
+  } catch (err) {
+    console.error('Failed to copy', err)
+  }
+}
+
 // Unique list of organizers
 const existingOrganizers = computed(() => {
   const set = new Set<string>()
@@ -148,6 +212,7 @@ const groupedByOrganizer = computed(() => {
       totalSpent: number
       totalAvailableNet: number
       activeCount: number
+      hasAlert: boolean
     }
   > = {}
 
@@ -162,6 +227,7 @@ const groupedByOrganizer = computed(() => {
         totalSpent: 0,
         totalAvailableNet: 0,
         activeCount: 0,
+        hasAlert: false,
       }
     }
     const stats = getCardAporteStats(card as any)
@@ -172,6 +238,9 @@ const groupedByOrganizer = computed(() => {
     groups[orgKey].totalAvailableNet += stats.totalAvailableNet
     if (stats.status === 'active' || stats.status === 'ending_soon') {
       groups[orgKey].activeCount += 1
+    }
+    if (stats.status === 'ending_soon' || stats.status === 'expired') {
+      groups[orgKey].hasAlert = true
     }
   })
 
@@ -356,7 +425,7 @@ function deleteCampaign(campaignId: string, title: string) {
             </h1>
           </div>
           <p class="mt-1 text-xs text-text-muted">
-            Gestão financeira independente de organizadores, eventos esportivos e prazos do Meta Ads.
+            Gestão financeira de aportes, cálculo de impostos do Meta Ads (12,15%) e alertas de renovação.
           </p>
         </div>
 
@@ -371,6 +440,68 @@ function deleteCampaign(campaignId: string, title: string) {
           </button>
         </div>
       </header>
+
+      <!-- PAINEL DE ALERTA DE RENOVAÇÃO URGENTE (VENCENDO EM 2 DIAS OU ENCERRADAS) -->
+      <div
+        v-if="renewalAlertCampaigns.length > 0"
+        class="mb-6 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 shadow-lg shadow-amber-500/5 space-y-3"
+      >
+        <div class="flex items-center justify-between gap-2 border-b border-amber-500/20 pb-2.5">
+          <div class="flex items-center gap-2.5">
+            <div class="flex size-8 items-center justify-center rounded-xl bg-amber-500/20 text-amber-300">
+              <AlertTriangle :size="18" />
+            </div>
+            <div>
+              <h2 class="text-sm font-extrabold text-amber-200">
+                🔔 Alerta de Renovação de Aporte ({{ renewalAlertCampaigns.length }} evento(s) crítico(s))
+              </h2>
+              <p class="text-[11px] text-amber-300/80">
+                Campanhas vencendo nos próximos 2 dias ou encerradas que necessitam de cobrança de novo aporte.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          <div
+            v-for="camp in renewalAlertCampaigns"
+            :key="camp.id"
+            class="flex items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-board-elevated/90 p-3 text-xs"
+          >
+            <div>
+              <span class="font-extrabold text-text-primary block truncate max-w-[180px]">
+                🏆 {{ camp.eventName }}
+              </span>
+              <span class="text-[11px] text-text-muted block">
+                👤 {{ camp.organizer }}
+              </span>
+              <span
+                :class="[
+                  'inline-flex items-center gap-1 font-bold text-[10px] mt-1',
+                  getCardAporteStats(camp as any).status === 'expired'
+                    ? 'text-red-400'
+                    : 'text-amber-300',
+                ]"
+              >
+                {{
+                  getCardAporteStats(camp as any).status === 'expired'
+                    ? '🔴 Veiculação Encerrada'
+                    : `🟡 Vence em ${getCardAporteStats(camp as any).daysRemaining} dia(s)`
+                }}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-500/20 px-2.5 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/30"
+              @click="openWhatsappModal(camp)"
+            >
+              <MessageCircle :size="14" />
+              Cobrar
+            </button>
+          </div>
+        </div>
+      </div>
 
       <!-- Cards de Métricas Principais (Financeiras e Veiculação) -->
       <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -512,7 +643,12 @@ function deleteCampaign(campaignId: string, title: string) {
         <div
           v-for="group in groupedByOrganizer"
           :key="group.organizer"
-          class="rounded-2xl border border-white/10 bg-board-elevated/60 overflow-hidden shadow-md"
+          :class="[
+            'rounded-2xl border overflow-hidden shadow-md transition-colors',
+            group.hasAlert
+              ? 'border-amber-500/40 bg-amber-500/5'
+              : 'border-white/10 bg-board-elevated/60',
+          ]"
         >
           <!-- Cabeçalho do Organizador -->
           <div
@@ -524,9 +660,17 @@ function deleteCampaign(campaignId: string, title: string) {
                 👤
               </div>
               <div>
-                <h2 class="text-sm font-extrabold text-text-primary">
-                  {{ group.organizer }}
-                </h2>
+                <div class="flex items-center gap-2">
+                  <h2 class="text-sm font-extrabold text-text-primary">
+                    {{ group.organizer }}
+                  </h2>
+                  <span
+                    v-if="group.hasAlert"
+                    class="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-500/30"
+                  >
+                    ⚠️ Renovação Próxima
+                  </span>
+                </div>
                 <p class="text-[11px] text-text-muted">
                   {{ group.cards.length }} evento(s) registrado(s) · {{ group.activeCount }} ativo(s)
                 </p>
@@ -558,7 +702,14 @@ function deleteCampaign(campaignId: string, title: string) {
             <div
               v-for="card in group.cards"
               :key="card.id"
-              class="rounded-xl border border-white/10 bg-card p-4 space-y-3 shadow-sm hover:border-white/20"
+              :class="[
+                'rounded-xl border p-4 space-y-3 shadow-sm transition-all',
+                getCardAporteStats(card as any).status === 'ending_soon'
+                  ? 'border-amber-500/50 bg-amber-500/10'
+                  : getCardAporteStats(card as any).status === 'expired'
+                    ? 'border-red-500/50 bg-red-500/10'
+                    : 'border-white/10 bg-card hover:border-white/20',
+              ]"
             >
               <!-- Topo do Evento -->
               <div class="flex flex-wrap items-start justify-between gap-2">
@@ -584,13 +735,13 @@ function deleteCampaign(campaignId: string, title: string) {
                   </span>
                   <span
                     v-else-if="getCardAporteStats(card as any).status === 'ending_soon'"
-                    class="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-bold text-amber-300"
+                    class="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-bold text-amber-300 ring-1 ring-amber-500/40"
                   >
                     🟡 Vence em breve ({{ getCardAporteStats(card as any).daysRemaining }}d)
                   </span>
                   <span
                     v-else-if="getCardAporteStats(card as any).status === 'expired'"
-                    class="inline-flex items-center gap-1 rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-bold text-red-300"
+                    class="inline-flex items-center gap-1 rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-bold text-red-300 ring-1 ring-red-500/40"
                   >
                     🔴 Veiculação Encerrada
                   </span>
@@ -600,6 +751,18 @@ function deleteCampaign(campaignId: string, title: string) {
                   >
                     Nenhum aporte
                   </span>
+
+                  <!-- Botão de Cobrar no WhatsApp se estiver vencendo ou encerrada -->
+                  <button
+                    v-if="getCardAporteStats(card as any).status === 'ending_soon' || getCardAporteStats(card as any).status === 'expired'"
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-lg bg-emerald-500/20 px-2.5 py-1 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/30"
+                    title="Gerar mensagem formatada para WhatsApp"
+                    @click="openWhatsappModal(card)"
+                  >
+                    <MessageCircle :size="13" />
+                    Cobrar
+                  </button>
 
                   <!-- Botão de Novo Aporte no Evento -->
                   <button
@@ -998,6 +1161,81 @@ function deleteCampaign(campaignId: string, title: string) {
           </button>
         </div>
       </form>
+    </div>
+  </Teleport>
+
+  <!-- MODAL: COBRAR APORTE NO WHATSAPP -->
+  <Teleport to="body">
+    <div
+      v-if="showWhatsappModal && targetCampaignForWhatsapp"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div
+        class="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        @click="showWhatsappModal = false"
+      />
+      <div class="relative z-10 w-full max-w-lg rounded-2xl border border-emerald-500/30 bg-board-elevated p-6 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-white/10 pb-3">
+          <div class="flex items-center gap-2">
+            <div class="flex size-8 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300">
+              <MessageCircle :size="18" />
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-text-primary">Cobrar Aporte via WhatsApp</h3>
+              <p class="text-xs text-text-muted">
+                {{ targetCampaignForWhatsapp.eventName }} ({{ targetCampaignForWhatsapp.organizer }})
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="text-text-muted hover:text-text-primary"
+            @click="showWhatsappModal = false"
+          >
+            <X :size="18" />
+          </button>
+        </div>
+
+        <div class="space-y-2">
+          <label class="text-xs font-bold text-text-muted block">
+            Mensagem Personalizada Pronta para Envio:
+          </label>
+          <textarea
+            :value="whatsappMessage"
+            readonly
+            rows="9"
+            class="w-full rounded-xl border border-white/10 bg-surface/80 p-3 text-xs text-text-primary outline-none resize-none font-sans leading-relaxed"
+          />
+        </div>
+
+        <div class="flex items-center justify-between gap-2 pt-1">
+          <span v-if="copiedWhatsappMsg" class="inline-flex items-center gap-1 text-xs font-bold text-emerald-400">
+            <Check :size="14" />
+            Mensagem copiada para a área de transferência!
+          </span>
+          <span v-else class="text-[11px] text-text-muted">
+            Clique no botão ao lado para copiar e colar no WhatsApp.
+          </span>
+
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="rounded-xl px-3 py-2 text-xs text-text-muted hover:bg-white/5"
+              @click="showWhatsappModal = false"
+            >
+              Fechar
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500 px-4 py-2 text-xs font-bold text-board hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20"
+              @click="copyWhatsappMessage"
+            >
+              <Copy :size="14" />
+              Copiar Mensagem
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </Teleport>
 </template>
