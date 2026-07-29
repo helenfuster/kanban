@@ -23,6 +23,8 @@ export interface WhatsappEventMetrics {
   campaignId: string
   eventName: string
   endDateText: string
+  daysRemaining: number
+  status: string
   salesCount: number | ''
   spentAmount: number | ''
   revenueAmount: number | ''
@@ -141,9 +143,21 @@ function openWhatsappModalForOrganizer(orgName: string, singleCampaign?: Campaig
   if (singleCampaign) {
     campaignsToInclude = [singleCampaign]
   } else {
-    campaignsToInclude = campaignsStore.campaigns.filter(
+    // Only include campaigns ending in 1 to 2 days (or expired)
+    const allOrgCampaigns = campaignsStore.campaigns.filter(
       (c) => (c.organizer || '').trim().toLowerCase() === orgName.trim().toLowerCase(),
     )
+    
+    const criticalCampaigns = allOrgCampaigns.filter((c) => {
+      const stats = getCardAporteStats(c as any)
+      return (
+        stats.status === 'ending_soon' ||
+        stats.status === 'expired' ||
+        (stats.daysRemaining !== null && stats.daysRemaining !== undefined && stats.daysRemaining <= 2)
+      )
+    })
+
+    campaignsToInclude = criticalCampaigns.length > 0 ? criticalCampaigns : allOrgCampaigns
   }
 
   whatsappEvents.value = campaignsToInclude.map((c) => {
@@ -158,11 +172,14 @@ function openWhatsappModalForOrganizer(orgName: string, singleCampaign?: Campaig
     }
 
     const spent = stats.totalSpent > 0 ? stats.totalSpent : stats.totalGross
+    const daysRem = stats.daysRemaining ?? 0
 
     return {
       campaignId: c.id,
       eventName: (c.eventName || 'EVENTO').toUpperCase(),
       endDateText: endStr,
+      daysRemaining: daysRem,
+      status: stats.status,
       salesCount: '',
       spentAmount: spent || '',
       revenueAmount: '',
@@ -178,8 +195,26 @@ const generatedWhatsappReport = computed(() => {
   if (!whatsappOrganizerName.value || !whatsappEvents.value.length) return ''
 
   const lines: string[] = []
+
+  // Intro Paragraph according to user specification
+  if (whatsappEvents.value.length === 1) {
+    const ev = whatsappEvents.value[0]
+    const daysText =
+      ev.status === 'expired'
+        ? 'já encerrou'
+        : ev.daysRemaining <= 0
+          ? 'encerra hoje'
+          : `encerra em ${ev.daysRemaining} dia(s)`
+
+    lines.push(`Passando para avisar que a veiculação da campanha do evento ${ev.eventName} no Meta Ads ${daysText}.\n`)
+  } else {
+    lines.push(`Passando para avisar que a veiculação das campanhas no Meta Ads encerra nos próximos dias.\n`)
+  }
+
+  // Header Block
   lines.push(`DADOS DE TRÁFEGO ${whatsappOrganizerName.value.toUpperCase()}\n`)
 
+  // Event Data Blocks
   whatsappEvents.value.forEach((ev, idx) => {
     if (idx > 0) lines.push('')
     lines.push(`(${ev.endDateText})`)
@@ -199,6 +234,9 @@ const generatedWhatsappReport = computed(() => {
     const roasStr = roasVal ? String(roasVal).replace('.', ',') : '0,00'
     lines.push(`ROAS: ${roasStr}`)
   })
+
+  // Outro Paragraph according to user specification
+  lines.push(`\nPara garantirmos a continuidade dos anúncios e vendas sem interrupções, podemos seguir com o próximo aporte? 🚀`)
 
   return lines.join('\n')
 })
@@ -510,7 +548,7 @@ function deleteCampaign(campaignId: string, title: string) {
                 🔔 Alerta de Renovação de Aporte ({{ renewalAlertCampaigns.length }} evento(s) crítico(s))
               </h2>
               <p class="text-[11px] text-amber-300/80">
-                Campanhas vencendo nos próximos 2 dias ou encerradas que necessitam de cobrança de novo aporte.
+                Campanhas vencendo nos próximos 1 a 2 dias ou encerradas que necessitam de cobrança de novo aporte.
               </p>
             </div>
           </div>
@@ -548,7 +586,7 @@ function deleteCampaign(campaignId: string, title: string) {
             <button
               type="button"
               class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-500/20 px-2.5 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/30"
-              @click="openWhatsappModalForOrganizer(camp.organizer)"
+              @click="openWhatsappModalForOrganizer(camp.organizer, camp)"
             >
               <MessageCircle :size="14" />
               Cobrar
@@ -732,11 +770,11 @@ function deleteCampaign(campaignId: string, title: string) {
             </div>
 
             <div class="flex items-center gap-4">
-              <!-- Botão de Cobrança Agrupada do Organizador -->
+              <!-- Botão de Cobrança Agrupada do Organizador (Filtra eventos a 1-2 dias do fim) -->
               <button
                 type="button"
                 class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/30"
-                title="Gerar Relatório Agrupado de Tráfego para WhatsApp"
+                title="Gerar Relatório Agrupado de Tráfego (Eventos perto de vencer)"
                 @click.stop="openWhatsappModalForOrganizer(group.organizer)"
               >
                 <MessageCircle :size="14" />
@@ -1248,7 +1286,7 @@ function deleteCampaign(campaignId: string, title: string) {
             <div>
               <h3 class="text-base font-bold text-text-primary">Gerador de Dados de Tráfego (WhatsApp)</h3>
               <p class="text-xs text-text-muted">
-                Organizador: <strong class="text-text-primary">{{ whatsappOrganizerName }}</strong> ({{ whatsappEvents.length }} evento(s))
+                Organizador: <strong class="text-text-primary">{{ whatsappOrganizerName }}</strong> ({{ whatsappEvents.length }} evento(s) no prazo de 1-2 dias)
               </p>
             </div>
           </div>
@@ -1265,7 +1303,7 @@ function deleteCampaign(campaignId: string, title: string) {
           <!-- LADO ESQUERDO: CAMPOS DE MÉTRICAS EDITÁVEIS PARA CADA EVENTO -->
           <div class="space-y-4">
             <p class="text-xs font-bold text-text-muted uppercase tracking-wider">
-              Preencha os dados de desempenho por evento:
+              Preencha os dados por evento (Máx. 1-2 dias de término):
             </p>
 
             <div
@@ -1342,7 +1380,7 @@ function deleteCampaign(campaignId: string, title: string) {
             <textarea
               :value="generatedWhatsappReport"
               readonly
-              class="flex-1 w-full rounded-xl border border-white/10 bg-column p-3.5 text-xs text-text-primary outline-none resize-none font-mono leading-relaxed min-h-[260px]"
+              class="flex-1 w-full rounded-xl border border-white/10 bg-column p-3.5 text-xs text-text-primary outline-none resize-none font-mono leading-relaxed min-h-[280px]"
             />
           </div>
         </div>
@@ -1353,7 +1391,7 @@ function deleteCampaign(campaignId: string, title: string) {
             Relatório copiado com sucesso! Prático para colar no WhatsApp.
           </span>
           <span v-else class="text-[11px] text-text-muted">
-            Formatado exatamente conforme seu padrão de tráfego.
+            Mensagem adaptada com a introdução e o pedido do novo aporte.
           </span>
 
           <div class="flex items-center gap-2">
