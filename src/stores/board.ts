@@ -146,7 +146,7 @@ export function getCardAporteStats(
   const startDate = targetAporte.startDate || targetAporte.date
   const endDate = targetAporte.endDate || startDate
 
-  if (endDate < todayStr) {
+  if ((card as any).finished || targetAporte.finished || endDate < todayStr) {
     return {
       totalAmount: totalGross,
       totalGross,
@@ -159,6 +159,7 @@ export function getCardAporteStats(
       status: 'expired',
     }
   }
+
 
   if (startDate > todayStr) {
     return {

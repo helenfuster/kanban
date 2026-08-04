@@ -141,9 +141,12 @@ CREATE TABLE IF NOT EXISTS public.campaigns (
   event_name TEXT NOT NULL,
   description TEXT DEFAULT '',
   aportes JSONB DEFAULT '[]'::jsonb,
+  finished BOOLEAN DEFAULT FALSE,
+  finished_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
 
 
 -- 14. CRIAR BUCKETS DE STORAGE (AVATARS E CARD-ATTACHMENTS)

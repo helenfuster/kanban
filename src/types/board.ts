@@ -83,7 +83,10 @@ export interface Aporte {
   startDate: string
   endDate: string
   notes?: string
+  finished?: boolean
+  finishedAt?: string | null
 }
+
 
 export interface Card {
   id: string

@@ -11,6 +11,8 @@ export interface Campaign {
   eventName: string
   description?: string
   aportes: Aporte[]
+  finished?: boolean
+  finishedAt?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -22,6 +24,8 @@ interface CampaignRow {
   event_name: string
   description: string | null
   aportes: Aporte[] | null
+  finished: boolean | null
+  finished_at: string | null
   created_at: string
   updated_at: string
 }
@@ -66,6 +70,8 @@ export const useCampaignsStore = defineStore('campaigns', () => {
         event_name: item.eventName,
         description: item.description ?? '',
         aportes: item.aportes ?? [],
+        finished: item.finished ?? false,
+        finished_at: item.finishedAt ?? null,
         created_at: item.createdAt,
         updated_at: item.updatedAt,
       }))
@@ -86,6 +92,8 @@ export const useCampaignsStore = defineStore('campaigns', () => {
       eventName: row.event_name,
       description: row.description ?? undefined,
       aportes: Array.isArray(row.aportes) ? row.aportes : [],
+      finished: row.finished ?? false,
+      finishedAt: row.finished_at ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }
@@ -209,6 +217,8 @@ export const useCampaignsStore = defineStore('campaigns', () => {
       eventName: eventName.trim(),
       description: description?.trim() || `Campanha para o evento ${eventName} do organizador ${organizer}.`,
       aportes: aportesList,
+      finished: false,
+      finishedAt: null,
       createdAt: now,
       updatedAt: now,
     }
@@ -224,6 +234,8 @@ export const useCampaignsStore = defineStore('campaigns', () => {
         event_name: campaign.eventName,
         description: campaign.description,
         aportes: campaign.aportes,
+        finished: campaign.finished,
+        finished_at: campaign.finishedAt,
         created_at: campaign.createdAt,
         updated_at: campaign.updatedAt,
       })
@@ -251,6 +263,8 @@ export const useCampaignsStore = defineStore('campaigns', () => {
           event_name: campaign.eventName,
           description: campaign.description,
           aportes: campaign.aportes,
+          finished: campaign.finished ?? false,
+          finished_at: campaign.finishedAt ?? null,
           updated_at: campaign.updatedAt,
         })
         .eq('id', campaign.id)
@@ -262,6 +276,28 @@ export const useCampaignsStore = defineStore('campaigns', () => {
       const msg = err instanceof Error ? err.message : String(err)
       reportError(msg)
     }
+  }
+
+  async function toggleFinishCampaign(campaignId: string) {
+    const campaign = campaigns.value.find((c) => c.id === campaignId)
+    if (!campaign) return
+    const isFinished = !campaign.finished
+    campaign.finished = isFinished
+    campaign.finishedAt = isFinished ? new Date().toISOString() : null
+    campaign.updatedAt = new Date().toISOString()
+    await persistCampaign(campaign)
+  }
+
+  async function toggleFinishAporte(campaignId: string, aporteId: string) {
+    const campaign = campaigns.value.find((c) => c.id === campaignId)
+    if (!campaign) return
+    const aporte = campaign.aportes.find((ap) => ap.id === aporteId)
+    if (!aporte) return
+    const isFinished = !aporte.finished
+    aporte.finished = isFinished
+    aporte.finishedAt = isFinished ? new Date().toISOString() : null
+    campaign.updatedAt = new Date().toISOString()
+    await persistCampaign(campaign)
   }
 
   async function addAporte(campaignId: string, aporteData: Omit<Aporte, 'id'>) {
@@ -328,6 +364,8 @@ export const useCampaignsStore = defineStore('campaigns', () => {
     init,
     reset,
     createCampaign,
+    toggleFinishCampaign,
+    toggleFinishAporte,
     addAporte,
     updateAporte,
     deleteAporte,

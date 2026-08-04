@@ -3,9 +3,11 @@ import { computed, onMounted, ref } from 'vue'
 import {
   AlertTriangle,
   Check,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   Copy,
+  Flag,
   Megaphone,
   MessageCircle,
   Pencil,
@@ -15,6 +17,7 @@ import {
   Trophy,
   X,
 } from '@lucide/vue'
+
 import { getCardAporteStats, META_TAX_RATE } from '../stores/board'
 import { useCampaignsStore } from '../stores/campaigns'
 import type { Aporte } from '../types/board'
@@ -983,7 +986,13 @@ function deleteCampaign(campaignId: string, title: string) {
                 <div class="flex items-center gap-2">
                   <!-- Tag de Status da Veiculação -->
                   <span
-                    v-if="getCardAporteStats(card as any).status === 'active'"
+                    v-if="card.finished"
+                    class="inline-flex items-center gap-1.5 rounded-full bg-purple-500/20 px-3 py-0.5 text-xs font-black text-purple-300 ring-1 ring-purple-500/40"
+                  >
+                    🏁 Investimento Finalizado
+                  </span>
+                  <span
+                    v-else-if="getCardAporteStats(card as any).status === 'active'"
                     class="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-300"
                   >
                     🟢 Em Veiculação ({{ getCardAporteStats(card as any).daysRemaining }}d restante(s))
@@ -1006,6 +1015,22 @@ function deleteCampaign(campaignId: string, title: string) {
                   >
                     Nenhum aporte
                   </span>
+
+                  <!-- Botão de Finalizar / Reabrir Investimento do Evento -->
+                  <button
+                    type="button"
+                    :class="[
+                      'inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all',
+                      card.finished
+                        ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30'
+                        : 'bg-stone-500/20 text-stone-300 hover:bg-stone-500/30 hover:text-white',
+                    ]"
+                    :title="card.finished ? 'Reabrir investimento deste evento' : 'Finalizar investimento quando o organizador parar os aportes'"
+                    @click="campaignsStore.toggleFinishCampaign(card.id)"
+                  >
+                    <CheckCircle2 :size="13" />
+                    {{ card.finished ? 'Reabrir Investimento' : 'Finalizar Investimento' }}
+                  </button>
 
                   <!-- Botão de Cobrar Este Evento Individual -->
                   <button
@@ -1039,8 +1064,63 @@ function deleteCampaign(campaignId: string, title: string) {
                 </div>
               </div>
 
+              <!-- BLOCO DE SALDO TOTAL DAS MÉTRICAS TOTAIS QUANDO O EVENTO FOR FINALIZADO -->
+              <div
+                v-if="card.finished"
+                class="rounded-xl border border-purple-500/40 bg-purple-950/40 p-4 space-y-3 shadow-lg shadow-purple-950/50"
+              >
+                <div class="flex items-center justify-between border-b border-purple-500/20 pb-2">
+                  <div class="flex items-center gap-2">
+                    <CheckCircle2 :size="18" class="text-purple-400" />
+                    <h4 class="text-xs font-black uppercase tracking-wider text-purple-200">
+                      🏁 Saldo Final & Métricas Totais do Evento (Finalizado)
+                    </h4>
+                  </div>
+                  <span class="text-[10px] font-bold text-purple-300/80">
+                    Encerrado em {{ formatDateBr(card.finishedAt?.slice(0, 10) || new Date().toISOString().slice(0, 10)) }}
+                  </span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 text-xs sm:grid-cols-5">
+                  <div class="rounded-lg bg-surface/80 p-2.5 border border-white/5">
+                    <span class="text-[10px] text-text-muted block font-semibold uppercase">1. Bruto Aportado Total</span>
+                    <span class="font-black text-text-primary text-sm">
+                      {{ formatCurrency(getCardAporteStats(card as any).totalGross) }}
+                    </span>
+                  </div>
+
+                  <div class="rounded-lg bg-surface/80 p-2.5 border border-white/5">
+                    <span class="text-[10px] text-text-muted block font-semibold uppercase">2. Impostos Meta (12,15%)</span>
+                    <span class="font-bold text-red-400 text-sm">
+                      {{ formatCurrency(getCardAporteStats(card as any).totalTax) }}
+                    </span>
+                  </div>
+
+                  <div class="rounded-lg bg-surface/80 p-2.5 border border-white/5">
+                    <span class="text-[10px] text-text-muted block font-semibold uppercase">3. Líquido Total Anúncios</span>
+                    <span class="font-bold text-sky-400 text-sm">
+                      {{ formatCurrency(getCardAporteStats(card as any).totalNet) }}
+                    </span>
+                  </div>
+
+                  <div class="rounded-lg bg-surface/80 p-2.5 border border-white/5">
+                    <span class="text-[10px] text-text-muted block font-semibold uppercase">4. Total Gasto / Utilizado</span>
+                    <span class="font-bold text-amber-300 text-sm">
+                      {{ formatCurrency(getCardAporteStats(card as any).totalSpent) }}
+                    </span>
+                  </div>
+
+                  <div class="rounded-lg bg-purple-500/20 p-2.5 border border-purple-500/40 col-span-2 sm:col-span-1">
+                    <span class="text-[10px] text-purple-300 block font-black uppercase">5. Saldo Remanescente</span>
+                    <span class="font-black text-purple-200 text-sm">
+                      {{ formatCurrency(getCardAporteStats(card as any).totalAvailableNet) }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               <!-- Resumo das Estatísticas Financeiras do Evento -->
-              <div class="grid grid-cols-2 gap-3 rounded-lg border border-white/5 bg-surface/50 p-3 text-xs sm:grid-cols-4">
+              <div v-else class="grid grid-cols-2 gap-3 rounded-lg border border-white/5 bg-surface/50 p-3 text-xs sm:grid-cols-4">
                 <div>
                   <span class="text-[10px] text-text-muted block font-semibold uppercase">Bruto Aportado</span>
                   <span class="font-bold text-text-primary text-xs">
@@ -1103,10 +1183,30 @@ function deleteCampaign(campaignId: string, title: string) {
                       <span v-if="ap.notes" class="text-[10px] text-text-muted italic">
                         ({{ ap.notes }})
                       </span>
+                      <span
+                        v-if="ap.finished"
+                        class="rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-bold text-purple-300 border border-purple-500/30"
+                      >
+                        Finalizado
+                      </span>
                     </div>
 
-                    <!-- Botões de Ação para cada Aporte: Editar e Excluir -->
+                    <!-- Botões de Ação para cada Aporte: Finalizar, Editar e Excluir -->
                     <div class="flex items-center gap-1">
+                      <button
+                        type="button"
+                        :class="[
+                          'text-xs px-1.5 py-0.5 rounded font-semibold transition-colors flex items-center gap-1',
+                          ap.finished
+                            ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30'
+                            : 'text-text-muted hover:text-text-primary hover:bg-white/10',
+                        ]"
+                        :title="ap.finished ? 'Reabrir este aporte' : 'Finalizar este aporte'"
+                        @click="campaignsStore.toggleFinishAporte(card.id, ap.id)"
+                      >
+                        <CheckCircle2 :size="12" />
+                        <span>{{ ap.finished ? 'Finalizado' : 'Finalizar' }}</span>
+                      </button>
                       <button
                         type="button"
                         class="text-text-muted hover:text-text-primary p-1 rounded hover:bg-white/10"
@@ -1125,6 +1225,7 @@ function deleteCampaign(campaignId: string, title: string) {
                       </button>
                     </div>
                   </div>
+
                 </div>
               </div>
             </div>
