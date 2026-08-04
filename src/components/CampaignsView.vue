@@ -7,7 +7,6 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
-  Flag,
   Megaphone,
   MessageCircle,
   Pencil,
@@ -17,6 +16,7 @@ import {
   Trophy,
   X,
 } from '@lucide/vue'
+
 
 import { getCardAporteStats, META_TAX_RATE } from '../stores/board'
 import { useCampaignsStore } from '../stores/campaigns'
