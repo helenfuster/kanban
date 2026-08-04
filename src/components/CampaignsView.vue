@@ -929,16 +929,18 @@ function deleteCampaign(campaignId: string, title: string) {
             </div>
 
             <div class="flex items-center gap-4">
-              <!-- Botão de Cobrança Agrupada do Organizador -->
+              <!-- Botão de Cobrança Agrupada do Organizador (Oculto se todos estiverem finalizados) -->
               <button
+                v-if="group.cards.some((c) => !c.finished)"
                 type="button"
                 class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/30"
-                title="Gerar Relatório Agrupado de Tráfego (Eventos perto de vencer)"
+                title="Gerar Relatório Agrupado de Tráfego (Eventos em andamento)"
                 @click.stop="openWhatsappModalForOrganizer(group.organizer)"
               >
                 <MessageCircle :size="14" />
-                Cobrar ({{ group.cards.length }} evento(s))
+                Cobrar ({{ group.cards.filter((c) => !c.finished).length }} evento(s))
               </button>
+
 
               <div class="text-right">
                 <span class="text-[10px] uppercase font-bold tracking-wider text-text-muted block">Saldo Líquido Disponível</span>
@@ -1037,8 +1039,9 @@ function deleteCampaign(campaignId: string, title: string) {
                     {{ card.finished ? 'Reabrir Investimento' : 'Finalizar Investimento' }}
                   </button>
 
-                  <!-- Botão de Cobrar Este Evento Individual -->
+                  <!-- Botão de Cobrar Este Evento Individual (Oculto se finalizado) -->
                   <button
+                    v-if="!card.finished"
                     type="button"
                     class="inline-flex items-center gap-1 rounded-lg bg-emerald-500/20 px-2.5 py-1 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/30"
                     title="Gerar Relatório de Tráfego deste evento para WhatsApp"
@@ -1047,6 +1050,7 @@ function deleteCampaign(campaignId: string, title: string) {
                     <MessageCircle :size="13" />
                     Cobrar Este
                   </button>
+
 
                   <!-- Botão de Novo Aporte no Evento -->
                   <button
