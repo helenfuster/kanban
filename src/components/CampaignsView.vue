@@ -166,6 +166,7 @@ const campaignCards = computed(() => campaignsStore.campaigns)
 // List of campaigns requiring urgent renewal (ending in <= 2 days or expired)
 const renewalAlertCampaigns = computed(() => {
   return campaignCards.value.filter((c) => {
+    if (c.finished) return false
     const stats = getCardAporteStats(c as any)
     return stats.status === 'ending_soon' || stats.status === 'expired'
   })
@@ -186,6 +187,7 @@ const renewalAlertOrganizers = computed(() => {
   > = {}
 
   campaignCards.value.forEach((card) => {
+    if (card.finished) return
     const stats = getCardAporteStats(card as any)
     if (stats.status === 'ending_soon' || stats.status === 'expired') {
       const orgKey = card.organizer?.trim() || 'Sem Organizador'
@@ -222,8 +224,9 @@ function openWhatsappModalForOrganizer(orgName: string, singleCampaign?: Campaig
     (c) => (c.organizer || '').trim().toLowerCase() === orgName.trim().toLowerCase(),
   )
 
-  // Filter campaigns ending in 1 to 2 days or expired
+  // Filter campaigns ending in 1 to 2 days or expired (excluding finished ones)
   const criticalCampaigns = allOrgCampaigns.filter((c) => {
+    if (c.finished) return false
     const stats = getCardAporteStats(c as any)
     return (
       stats.status === 'ending_soon' ||
@@ -231,6 +234,7 @@ function openWhatsappModalForOrganizer(orgName: string, singleCampaign?: Campaig
       (stats.daysRemaining !== null && stats.daysRemaining !== undefined && stats.daysRemaining <= 2)
     )
   })
+
 
   // Group all critical campaigns for the organizer together
   let campaignsToInclude = criticalCampaigns.length > 0 ? criticalCampaigns : allOrgCampaigns
@@ -417,10 +421,10 @@ const groupedByOrganizer = computed(() => {
     groups[orgKey].totalNet += stats.totalNet
     groups[orgKey].totalSpent += stats.totalSpent
     groups[orgKey].totalAvailableNet += stats.totalAvailableNet
-    if (stats.status === 'active' || stats.status === 'ending_soon') {
+    if (!card.finished && (stats.status === 'active' || stats.status === 'ending_soon')) {
       groups[orgKey].activeCount += 1
     }
-    if (stats.status === 'ending_soon' || stats.status === 'expired') {
+    if (!card.finished && (stats.status === 'ending_soon' || stats.status === 'expired')) {
       groups[orgKey].hasAlert = true
     }
   })
@@ -449,9 +453,10 @@ const overallStats = computed(() => {
     totalNet += stats.totalNet
     totalSpent += stats.totalSpent
     totalAvailableNet += stats.totalAvailableNet
-    if (stats.status === 'active') activeCount += 1
-    if (stats.status === 'ending_soon') endingSoonCount += 1
+    if (!card.finished && stats.status === 'active') activeCount += 1
+    if (!card.finished && stats.status === 'ending_soon') endingSoonCount += 1
   })
+
 
   return {
     totalGross,
