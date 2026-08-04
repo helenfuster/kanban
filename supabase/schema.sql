@@ -133,6 +133,19 @@ CREATE TABLE IF NOT EXISTS public.daily_entries (
   CONSTRAINT daily_entries_member_date_unique UNIQUE (member_id, date_key)
 );
 
+-- 13.5. TABELA DE CAMPANHAS (campaigns)
+CREATE TABLE IF NOT EXISTS public.campaigns (
+  id TEXT PRIMARY KEY,
+  board_id TEXT REFERENCES public.boards(id) ON DELETE CASCADE,
+  organizer TEXT NOT NULL,
+  event_name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  aportes JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+
 -- 14. CRIAR BUCKETS DE STORAGE (AVATARS E CARD-ATTACHMENTS)
 INSERT INTO storage.buckets (id, name, public)
 VALUES 
@@ -264,6 +277,7 @@ ALTER TABLE public.comments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attachments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_entries DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.campaigns DISABLE ROW LEVEL SECURITY;
 
 -- 18. PUBLICAÇÃO REALTIME (TRATAMENTO DE DUPLICADOS)
 DO $$
@@ -276,7 +290,8 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE 
       public.cards, public.columns, public.members, public.comments, 
       public.attachments, public.labels, public.card_labels, 
-      public.card_members, public.notes, public.daily_entries;
+      public.card_members, public.notes, public.daily_entries, public.campaigns;
+
   EXCEPTION
     WHEN OTHERS THEN NULL;
   END;

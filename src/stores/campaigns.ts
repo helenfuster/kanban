@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { Aporte } from '../types/board'
+import { BOARD_ID, supabase } from '../lib/supabase'
+import { useToastStore } from './toast'
 
 export interface Campaign {
   id: string
@@ -12,6 +15,17 @@ export interface Campaign {
   updatedAt: string
 }
 
+interface CampaignRow {
+  id: string
+  board_id: string
+  organizer: string
+  event_name: string
+  description: string | null
+  aportes: Aporte[] | null
+  created_at: string
+  updated_at: string
+}
+
 const STORAGE_KEY = 'kanban_runff_campaigns_v1'
 
 function createId(prefix: string) {
@@ -21,41 +35,165 @@ function createId(prefix: string) {
 export const useCampaignsStore = defineStore('campaigns', () => {
   const campaigns = ref<Campaign[]>([])
   const ready = ref(false)
+  const loading = ref(false)
+  const error = ref<string | null>(null)
 
-  function loadFromStorage() {
+  let channel: RealtimeChannel | null = null
+  let suppressRealtimeUntil = 0
+  let reloadTimer: ReturnType<typeof setTimeout> | null = null
+  let loadGeneration = 0
+
+  function quietRealtime(ms = 2000) {
+    suppressRealtimeUntil = Date.now() + ms
+  }
+
+  function reportError(raw: string) {
+    error.value = raw
+    useToastStore().error(raw)
+  }
+
+  async function migrateFromLocalStorageIfNeeded() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) {
-        campaigns.value = JSON.parse(raw)
-      } else {
-        campaigns.value = []
+      if (!raw) return
+      const localItems: Campaign[] = JSON.parse(raw)
+      if (!Array.isArray(localItems) || localItems.length === 0) return
+
+      const rows = localItems.map((item) => ({
+        id: item.id,
+        board_id: BOARD_ID,
+        organizer: item.organizer,
+        event_name: item.eventName,
+        description: item.description ?? '',
+        aportes: item.aportes ?? [],
+        created_at: item.createdAt,
+        updated_at: item.updatedAt,
+      }))
+
+      const { error: insertErr } = await supabase.from('campaigns').upsert(rows, { onConflict: 'id' })
+      if (!insertErr) {
+        localStorage.removeItem(STORAGE_KEY)
       }
-    } catch {
-      campaigns.value = []
-    } finally {
-      ready.value = true
+    } catch (e) {
+      console.warn('Failed to migrate local campaigns to Supabase:', e)
     }
   }
 
-  function saveToStorage() {
+  function mapRowToCampaign(row: CampaignRow): Campaign {
+    return {
+      id: row.id,
+      organizer: row.organizer,
+      eventName: row.event_name,
+      description: row.description ?? undefined,
+      aportes: Array.isArray(row.aportes) ? row.aportes : [],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
+  }
+
+  async function loadCampaigns(opts?: { background?: boolean }) {
+    const generation = ++loadGeneration
+    if (!opts?.background) {
+      loading.value = true
+      error.value = null
+    }
+
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(campaigns.value))
+      const { data, error: fetchErr } = await supabase
+        .from('campaigns')
+        .select('*')
+        .eq('board_id', BOARD_ID)
+        .order('updated_at', { ascending: false })
+
+      if (generation !== loadGeneration) return
+
+      if (fetchErr) {
+        if (!opts?.background) reportError(fetchErr.message)
+        return
+      }
+
+      const rows = (data ?? []) as unknown as CampaignRow[]
+
+      if (rows.length === 0) {
+        await migrateFromLocalStorageIfNeeded()
+        const { data: reData } = await supabase
+          .from('campaigns')
+          .select('*')
+          .eq('board_id', BOARD_ID)
+          .order('updated_at', { ascending: false })
+        if (reData && reData.length > 0) {
+          const reRows = reData as unknown as CampaignRow[]
+          campaigns.value = reRows.map(mapRowToCampaign)
+          ready.value = true
+          return
+        }
+      }
+
+      campaigns.value = rows.map(mapRowToCampaign)
+      error.value = null
     } catch (err) {
-      console.error('Error saving campaigns to storage', err)
+      if (generation !== loadGeneration) return
+      const msg = err instanceof Error ? err.message : String(err)
+      if (!opts?.background) reportError(msg)
+    } finally {
+      if (generation === loadGeneration) {
+        loading.value = false
+        ready.value = true
+      }
     }
   }
 
-  function init() {
-    if (ready.value) return
-    loadFromStorage()
+  function subscribeRealtime() {
+    unsubscribeRealtime()
+    channel = supabase
+      .channel(`campaigns:${BOARD_ID}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'campaigns' },
+        () => {
+          if (Date.now() < suppressRealtimeUntil) return
+          if (reloadTimer) clearTimeout(reloadTimer)
+          reloadTimer = setTimeout(() => {
+            reloadTimer = null
+            if (Date.now() < suppressRealtimeUntil) return
+            void loadCampaigns({ background: true })
+          }, 1000)
+        },
+      )
+      .subscribe()
   }
 
-  function createCampaign(
+  function unsubscribeRealtime() {
+    if (reloadTimer) {
+      clearTimeout(reloadTimer)
+      reloadTimer = null
+    }
+    if (channel) {
+      void supabase.removeChannel(channel)
+      channel = null
+    }
+  }
+
+  async function init() {
+    if (ready.value) return
+    await loadCampaigns()
+    subscribeRealtime()
+  }
+
+  function reset() {
+    unsubscribeRealtime()
+    campaigns.value = []
+    ready.value = false
+    loading.value = false
+    error.value = null
+  }
+
+  async function createCampaign(
     organizer: string,
     eventName: string,
     description?: string,
     initialAporte?: Omit<Aporte, 'id'>,
-  ): Campaign {
+  ): Promise<Campaign> {
     const now = new Date().toISOString()
     const aportesList: Aporte[] = []
     if (initialAporte) {
@@ -76,11 +214,57 @@ export const useCampaignsStore = defineStore('campaigns', () => {
     }
 
     campaigns.value.unshift(campaign)
-    saveToStorage()
+    quietRealtime()
+
+    try {
+      const { error: insertErr } = await supabase.from('campaigns').insert({
+        id: campaign.id,
+        board_id: BOARD_ID,
+        organizer: campaign.organizer,
+        event_name: campaign.eventName,
+        description: campaign.description,
+        aportes: campaign.aportes,
+        created_at: campaign.createdAt,
+        updated_at: campaign.updatedAt,
+      })
+
+      if (insertErr) {
+        reportError(insertErr.message)
+        campaigns.value = campaigns.value.filter((c) => c.id !== campaign.id)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      reportError(msg)
+      campaigns.value = campaigns.value.filter((c) => c.id !== campaign.id)
+    }
+
     return campaign
   }
 
-  function addAporte(campaignId: string, aporteData: Omit<Aporte, 'id'>) {
+  async function persistCampaign(campaign: Campaign) {
+    quietRealtime()
+    try {
+      const { error: updateErr } = await supabase
+        .from('campaigns')
+        .update({
+          organizer: campaign.organizer,
+          event_name: campaign.eventName,
+          description: campaign.description,
+          aportes: campaign.aportes,
+          updated_at: campaign.updatedAt,
+        })
+        .eq('id', campaign.id)
+
+      if (updateErr) {
+        reportError(updateErr.message)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      reportError(msg)
+    }
+  }
+
+  async function addAporte(campaignId: string, aporteData: Omit<Aporte, 'id'>) {
     const campaign = campaigns.value.find((c) => c.id === campaignId)
     if (!campaign) return
     const aporte: Aporte = {
@@ -89,10 +273,10 @@ export const useCampaignsStore = defineStore('campaigns', () => {
     }
     campaign.aportes.unshift(aporte)
     campaign.updatedAt = new Date().toISOString()
-    saveToStorage()
+    await persistCampaign(campaign)
   }
 
-  function updateAporte(
+  async function updateAporte(
     campaignId: string,
     aporteId: string,
     updatedData: Partial<Omit<Aporte, 'id'>>,
@@ -103,26 +287,46 @@ export const useCampaignsStore = defineStore('campaigns', () => {
     if (!aporte) return
     Object.assign(aporte, updatedData)
     campaign.updatedAt = new Date().toISOString()
-    saveToStorage()
+    await persistCampaign(campaign)
   }
 
-  function deleteAporte(campaignId: string, aporteId: string) {
+  async function deleteAporte(campaignId: string, aporteId: string) {
     const campaign = campaigns.value.find((c) => c.id === campaignId)
     if (!campaign) return
     campaign.aportes = campaign.aportes.filter((ap) => ap.id !== aporteId)
     campaign.updatedAt = new Date().toISOString()
-    saveToStorage()
+    await persistCampaign(campaign)
   }
 
-  function deleteCampaign(campaignId: string) {
+  async function deleteCampaign(campaignId: string) {
+    const backup = [...campaigns.value]
     campaigns.value = campaigns.value.filter((c) => c.id !== campaignId)
-    saveToStorage()
+    quietRealtime()
+
+    try {
+      const { error: deleteErr } = await supabase
+        .from('campaigns')
+        .delete()
+        .eq('id', campaignId)
+
+      if (deleteErr) {
+        reportError(deleteErr.message)
+        campaigns.value = backup
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      reportError(msg)
+      campaigns.value = backup
+    }
   }
 
   return {
     campaigns,
     ready,
+    loading,
+    error,
     init,
+    reset,
     createCampaign,
     addAporte,
     updateAporte,

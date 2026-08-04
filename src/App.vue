@@ -20,8 +20,10 @@ import { useAuthStore } from './stores/auth'
 import { useBoardStore } from './stores/board'
 import { useNotesStore } from './stores/notes'
 import { useDailyStore } from './stores/dailyTodos'
+import { useCampaignsStore } from './stores/campaigns'
 
 const asyncOpts = { delay: 320 }
+
 
 const AgendaView = defineAsyncComponent({
   loader: () => import('./components/AgendaView.vue'),
@@ -56,6 +58,7 @@ const auth = useAuthStore()
 const board = useBoardStore()
 const notes = useNotesStore()
 const daily = useDailyStore()
+const campaigns = useCampaignsStore()
 const activeTab = ref<NavTab>('board')
 const bootstrapping = ref(false)
 const notesReady = ref(false)
@@ -106,10 +109,12 @@ watch(
       board.reset()
       notes.reset()
       daily.reset()
+      campaigns.reset()
       notesReady.value = false
       dailyReady.value = false
       return
     }
+
     bootstrapping.value = true
     try {
       await board.init()
