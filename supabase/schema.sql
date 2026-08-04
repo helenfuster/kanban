@@ -282,6 +282,10 @@ ALTER TABLE public.notes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_entries DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.campaigns DISABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Acesso total campaigns" ON public.campaigns;
+CREATE POLICY "Acesso total campaigns" ON public.campaigns FOR ALL USING (true) WITH CHECK (true);
+
+
 -- 18. PUBLICAÇÃO REALTIME (TRATAMENTO DE DUPLICADOS)
 DO $$
 BEGIN
